@@ -3,16 +3,20 @@ import * as THREE from 'three';
 /* ═══════════════════════════════════════════════════════════
    The avatar.
 
-   Anime characters do not read from geometry — they read from
-   the FACE. So the head is a tapered ovoid with a chin, and
-   the eyes are drawn on a canvas and wrapped onto the front of
-   it: big irises with a gradient, a heavy upper lash line, two
-   highlights. That one texture does more than any amount of
-   polygon detail.
+   The rule this is built on, learned the hard way: a stylised
+   3D character reads through its SILHOUETTE and a very simple
+   face. Detail on the face is not a bonus — past a certain
+   point it actively hurts, because a smooth 3D head wearing a
+   finely painted stare lands squarely in the uncanny valley.
 
-   Everything else is built to a five-head stylised proportion
-   and is fully parametric, because the creator screen rebuilds
-   this whole figure every time you press an arrow.
+   So the face is four marks: two eye shapes, two thin brows,
+   one highlight each, a small mouth. The front of the skull is
+   flattened so those marks sit on a near-flat plane and never
+   smear around the curve. Everything expressive lives in the
+   hair and the outfit, where it belongs.
+
+   All of it is parametric — the creator screen rebuilds the
+   whole figure on every arrow press.
    ═══════════════════════════════════════════════════════════ */
 
 const TAU = Math.PI * 2;
@@ -145,95 +149,83 @@ export function randomAvatar(rnd = Math.random) {
 const find = (arr, id) => arr.find((o) => o.id === id) || arr[0];
 
 /* ───────────── the face ─────────────
-   Drawn once per avatar into a 512² canvas and wrapped onto the
-   front of the skull. This is the whole trick. */
+   Simplicity is the whole point here.
+
+   A detailed eye — gradient iris, limbal ring, lash flick, blush — painted
+   onto a smooth 3D head does not read as anime. It reads as a doll, and a
+   doll with a photographic stare is genuinely unpleasant to look at. Every
+   stylised 3D game that gets this right does the opposite: solid dark eye
+   shapes, one highlight, thin brows, and nothing else. The character then
+   reads at six metres, which is where it is actually being seen.
+
+   So: no gradients, no blush, no lash lines. Two shapes and a dot. */
+
+/** the eye outline: a soft rounded almond, taller than it is round */
+function eyePath(ctx, w, h, expr) {
+  ctx.beginPath();
+  if (expr === 'sleepy') {
+    // half-lidded: the top is a shallow lid, the bottom a gentle curve
+    ctx.moveTo(-w * 0.5, -h * 0.02);
+    ctx.quadraticCurveTo(0, -h * 0.34, w * 0.5, -h * 0.02);
+    ctx.quadraticCurveTo(0, h * 0.3, -w * 0.5, -h * 0.02);
+  } else {
+    const top = expr === 'bright' ? -h * 0.62 : -h * 0.54;
+    ctx.moveTo(-w * 0.5, h * 0.04);
+    // outer corner slightly higher than the inner one: that tilt is the
+    // only thing separating a friendly eye from a blank one
+    ctx.bezierCurveTo(-w * 0.46, top, w * 0.3, top, w * 0.5, -h * 0.12);
+    ctx.bezierCurveTo(w * 0.36, h * 0.46, -w * 0.3, h * 0.5, -w * 0.5, h * 0.04);
+  }
+  ctx.closePath();
+}
 
 function drawEye(ctx, cx, cy, w, h, iris, mirror, expr) {
   ctx.save();
   ctx.translate(cx, cy);
   if (mirror) ctx.scale(-1, 1);
 
-  const sleepy = expr === 'sleepy';
-  const bright = expr === 'bright';
-  const openTop = sleepy ? -h * 0.24 : -h * (bright ? 0.58 : 0.5);
+  if (expr === 'smile') {
+    // a closed happy eye is an arc, not a shape — the classic ^ ^
+    ctx.strokeStyle = '#3a3040';
+    ctx.lineWidth = h * 0.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-w * 0.42, h * 0.16);
+    ctx.quadraticCurveTo(0, -h * 0.42, w * 0.42, h * 0.12);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
 
-  // ── the eye opening: a rounded almond, wider at the outer corner ──
-  ctx.beginPath();
-  ctx.moveTo(-w * 0.5, h * 0.06);
-  ctx.bezierCurveTo(-w * 0.42, openTop, w * 0.26, openTop * 1.05, w * 0.5, -h * 0.1);
-  ctx.bezierCurveTo(w * 0.34, h * 0.42, -w * 0.28, h * 0.46, -w * 0.5, h * 0.06);
-  ctx.closePath();
+  // A dark rim with the eye colour filling almost all of it. Painting the
+  // colour as a translucent wash over near-black just muddies it — an umber
+  // eye came out as dried blood.
+  eyePath(ctx, w, h, expr);
+  ctx.fillStyle = '#2f2836';
+  ctx.fill();
+
   ctx.save();
+  eyePath(ctx, w, h, expr);
   ctx.clip();
-
-  // sclera
-  ctx.fillStyle = '#fdfbf6';
-  ctx.fillRect(-w, -h, w * 2, h * 2);
-
-  // iris: tall oval, dark rim, light floor — the anime standard
-  const ir = h * (bright ? 0.55 : 0.5);
-  const ix = w * 0.02, iy = h * 0.02;
-  const g = ctx.createLinearGradient(0, iy - ir, 0, iy + ir);
   const c = new THREE.Color(iris);
-  // lift the whole ramp: a literal eye colour reads as a dark dot at
-  // arm's length, where anime irises glow
-  const base = c.clone().lerp(new THREE.Color('#ffffff'), 0.16);
-  const dark = c.clone().multiplyScalar(0.62).getStyle();
-  const lite = c.clone().lerp(new THREE.Color('#ffffff'), 0.62).getStyle();
-  g.addColorStop(0, dark);
-  g.addColorStop(0.42, base.getStyle());
-  g.addColorStop(1, lite);
-  ctx.fillStyle = g;
+  ctx.fillStyle = c.clone().lerp(new THREE.Color('#ffffff'), 0.22).getStyle();
   ctx.beginPath();
-  ctx.ellipse(ix, iy, ir * 0.82, ir, 0, 0, TAU);
+  ctx.ellipse(0, h * 0.1, w * 0.4, h * 0.4, 0, 0, Math.PI * 2);
   ctx.fill();
-
-  // limbal ring
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = h * 0.06;
+  // pupil, just dark enough to give the eye a centre
+  ctx.fillStyle = 'rgba(30,24,36,0.85)';
   ctx.beginPath();
-  ctx.ellipse(ix, iy, ir * 0.82, ir, 0, 0, TAU);
-  ctx.stroke();
-
-  // pupil
-  ctx.fillStyle = '#1a1620';
-  ctx.beginPath();
-  ctx.ellipse(ix, iy, ir * 0.34, ir * 0.46, 0, 0, TAU);
+  ctx.ellipse(0, h * 0.12, w * 0.17, h * 0.19, 0, 0, Math.PI * 2);
   ctx.fill();
-
-  // highlights: one big upper-left, one small lower-right
-  ctx.fillStyle = 'rgba(255,255,255,0.96)';
-  ctx.beginPath();
-  ctx.ellipse(ix - ir * 0.34, iy - ir * 0.42, ir * 0.3, ir * 0.26, -0.4, 0, TAU);
-  ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.beginPath();
-  ctx.ellipse(ix + ir * 0.3, iy + ir * 0.42, ir * 0.14, ir * 0.12, 0, 0, TAU);
-  ctx.fill();
-
   ctx.restore();
 
-  // ── upper lash line: heavy, tapering, flicked at the outer corner ──
-  ctx.strokeStyle = '#221c26';
-  ctx.lineCap = 'round';
-  ctx.lineWidth = h * (sleepy ? 0.2 : 0.24);
-  ctx.beginPath();
-  ctx.moveTo(-w * 0.52, h * 0.06);
-  ctx.bezierCurveTo(-w * 0.42, openTop, w * 0.26, openTop * 1.05, w * 0.54, -h * 0.14);
-  ctx.stroke();
-  // the flick
-  ctx.lineWidth = h * 0.16;
-  ctx.beginPath();
-  ctx.moveTo(w * 0.46, -h * 0.08);
-  ctx.lineTo(w * 0.66, -h * 0.3);
-  ctx.stroke();
-  // lower lid, much lighter
-  ctx.lineWidth = h * 0.08;
-  ctx.strokeStyle = 'rgba(34,28,38,0.5)';
-  ctx.beginPath();
-  ctx.moveTo(-w * 0.34, h * 0.3);
-  ctx.bezierCurveTo(-w * 0.1, h * 0.44, w * 0.24, h * 0.4, w * 0.46, h * 0.14);
-  ctx.stroke();
+  // one highlight. Two is a doll; none is a void.
+  if (expr !== 'sleepy') {
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath();
+    ctx.ellipse(-w * 0.17, -h * 0.22, w * 0.15, h * 0.15, -0.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -242,13 +234,16 @@ function drawBrow(ctx, cx, cy, w, h, color, mirror, expr) {
   ctx.save();
   ctx.translate(cx, cy);
   if (mirror) ctx.scale(-1, 1);
+  // brows sit well clear of the eye and stay thin — a heavy brow close to
+  // the lash reads as a scowl at any distance
   ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.8;
   ctx.lineCap = 'round';
-  ctx.lineWidth = h * 0.42;
-  const tilt = expr === 'bright' ? -h * 0.25 : (expr === 'sleepy' ? h * 0.16 : 0);
+  ctx.lineWidth = h * 0.34;
+  const tilt = expr === 'bright' ? -h * 0.3 : (expr === 'sleepy' ? h * 0.2 : 0);
   ctx.beginPath();
-  ctx.moveTo(-w * 0.5, h * 0.3 + tilt * 0.3);
-  ctx.quadraticCurveTo(-w * 0.05, -h * 0.45 + tilt, w * 0.5, h * 0.05 - tilt * 0.4);
+  ctx.moveTo(-w * 0.46, h * 0.24 + tilt * 0.3);
+  ctx.quadraticCurveTo(0, -h * 0.3 + tilt, w * 0.46, h * 0.06 - tilt * 0.35);
   ctx.stroke();
   ctx.restore();
 }
@@ -262,60 +257,48 @@ function faceTexture(cfg) {
 
   const iris = find(EYE_COLORS, cfg.eyes).hex;
   const hair = find(HAIR_COLORS, cfg.hairColor);
-  const skin = find(SKINS, cfg.skin);
   const expr = cfg.expression;
 
-  // Big. Anime eyes take up most of the space between brow and nose, and
-  // undersized ones are the single fastest way to make a face look wrong.
-  const eyeW = S * 0.275, eyeH = S * 0.245;
-  const eyeY = S * 0.5;
-  const dx = S * 0.2;
+  // Modest. The earlier version made these nearly a third of the face wide,
+  // which is where "cute" tips over into "staring".
+  const eyeW = S * 0.19, eyeH = S * 0.2;
+  const eyeY = S * 0.53;
+  const dx = S * 0.155;
 
-  // cheeks first, under everything — a hint, not rouge
-  for (const s of [-1, 1]) {
-    const bx = S * 0.5 + s * dx * 1.2, by = eyeY + S * 0.155;
-    const bl = ctx.createRadialGradient(bx, by, 2, bx, by, S * 0.1);
-    bl.addColorStop(0, 'rgba(214,128,116,0.13)');
-    bl.addColorStop(0.55, 'rgba(214,128,116,0.07)');
-    bl.addColorStop(1, 'rgba(214,128,116,0)');
-    ctx.fillStyle = bl;
-    ctx.fillRect(bx - S * 0.12, by - S * 0.12, S * 0.24, S * 0.24);
-  }
-
-  // The mirror flag puts the lash flick on the OUTER corner. Canvas +x is
-  // screen right, so the screen-left eye is the mirrored one.
   drawEye(ctx, S * 0.5 - dx, eyeY, eyeW, eyeH, iris, true, expr);
   drawEye(ctx, S * 0.5 + dx, eyeY, eyeW, eyeH, iris, false, expr);
 
-  drawBrow(ctx, S * 0.5 - dx, eyeY - S * 0.2, S * 0.19, S * 0.045, hair.hex, true, expr);
-  drawBrow(ctx, S * 0.5 + dx, eyeY - S * 0.2, S * 0.19, S * 0.045, hair.hex, false, expr);
+  const browCol = new THREE.Color(hair.hex).lerp(new THREE.Color('#ffffff'), 0.12).getStyle();
+  drawBrow(ctx, S * 0.5 - dx, eyeY - S * 0.145, S * 0.14, S * 0.038, browCol, true, expr);
+  drawBrow(ctx, S * 0.5 + dx, eyeY - S * 0.145, S * 0.14, S * 0.038, browCol, false, expr);
 
-  // nose: the faintest tick
-  ctx.strokeStyle = new THREE.Color(skin.shade).multiplyScalar(0.9).getStyle();
-  ctx.lineWidth = S * 0.008;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(S * 0.5 - S * 0.012, S * 0.665);
-  ctx.lineTo(S * 0.5 + S * 0.016, S * 0.675);
-  ctx.stroke();
-
-  // mouth: a small mark, and never a dark blob
-  ctx.strokeStyle = 'rgba(150,74,70,0.9)';
-  ctx.lineWidth = S * 0.009;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  const my = S * 0.735;
-  if (expr === 'smile' || expr === 'bright') {
-    ctx.moveTo(S * 0.5 - S * 0.032, my - S * 0.005);
-    ctx.quadraticCurveTo(S * 0.5, my + S * 0.024, S * 0.5 + S * 0.032, my - S * 0.005);
-  } else if (expr === 'sleepy') {
-    ctx.moveTo(S * 0.5 - S * 0.018, my);
-    ctx.lineTo(S * 0.5 + S * 0.018, my);
+  // mouth: barely there, and gone entirely when the eyes are already smiling
+  if (expr !== 'smile') {
+    ctx.strokeStyle = 'rgba(150,90,84,0.75)';
+    ctx.lineWidth = S * 0.0075;
+    ctx.lineCap = 'round';
+    const my = S * 0.7;
+    ctx.beginPath();
+    if (expr === 'bright') {
+      ctx.moveTo(S * 0.5 - S * 0.024, my - S * 0.004);
+      ctx.quadraticCurveTo(S * 0.5, my + S * 0.02, S * 0.5 + S * 0.024, my - S * 0.004);
+    } else if (expr === 'sleepy') {
+      ctx.moveTo(S * 0.5 - S * 0.014, my);
+      ctx.lineTo(S * 0.5 + S * 0.014, my);
+    } else {
+      ctx.moveTo(S * 0.5 - S * 0.016, my);
+      ctx.quadraticCurveTo(S * 0.5, my + S * 0.011, S * 0.5 + S * 0.016, my);
+    }
+    ctx.stroke();
   } else {
-    ctx.moveTo(S * 0.5 - S * 0.02, my);
-    ctx.quadraticCurveTo(S * 0.5, my + S * 0.012, S * 0.5 + S * 0.02, my);
+    ctx.strokeStyle = 'rgba(150,90,84,0.75)';
+    ctx.lineWidth = S * 0.0085;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(S * 0.5 - S * 0.026, S * 0.695);
+    ctx.quadraticCurveTo(S * 0.5, S * 0.722, S * 0.5 + S * 0.026, S * 0.695);
+    ctx.stroke();
   }
-  ctx.stroke();
 
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -377,7 +360,11 @@ function buildHead(cfg, mats) {
   const g = new THREE.Group();
   const R = 0.205;
 
-  // skull: an ovoid drawn in toward a chin, flattened at the back
+  /* The skull: an ovoid drawn in toward a soft chin, and — the important
+     part — flattened across the FRONT. A face painted onto a hemisphere
+     smears its features around the curve and the eyes end up staring off
+     sideways. Flattening the front gives the marks a plane to sit on, which
+     is the same reason cartoon heads are drawn with flat faces. */
   const geo = new THREE.SphereGeometry(R, 26, 22);
   const pos = geo.attributes.position;
   const v = new THREE.Vector3();
@@ -386,14 +373,20 @@ function buildHead(cfg, mats) {
     const t = v.y / R;                       // -1 bottom … 1 top
     if (t < 0) {
       // jaw narrows and comes to a soft chin
-      const k = 1 - Math.pow(-t, 1.7) * 0.52;
+      const k = 1 - Math.pow(-t, 1.6) * 0.46;
       v.x *= k;
       v.z *= k * 0.98;
-      v.y *= 1.14;                            // lengthen the lower face
+      v.y *= 1.1;
     } else {
-      v.x *= 1 - t * 0.04;
+      v.x *= 1 - t * 0.03;
     }
-    v.z *= v.z < 0 ? 0.9 : 1.0;               // flatten the back of the skull
+    if (v.z > 0) {
+      // pull the front face plane-ward, most strongly at its centre
+      const f = v.z / R;
+      v.z *= 1 - 0.3 * f * f;
+    } else {
+      v.z *= 0.92;                            // and round off the back
+    }
     pos.setXYZ(i, v.x, v.y, v.z);
   }
   geo.computeVertexNormals();
@@ -412,26 +405,35 @@ function buildHead(cfg, mats) {
   /* The face is a plane bent onto the skull. A plane keeps its UVs at
      0..1 with no remapping, which is what lets the canvas be authored
      as a straightforward portrait. */
-  const FW = R * 1.72, FH = R * 1.96;
-  const fg = new THREE.PlaneGeometry(FW, FH, 14, 14);
+  const FW = R * 1.5, FH = R * 1.7;
+  const FY = -R * 0.06;                       // where the plane sits on the head
+  const fg = new THREE.PlaneGeometry(FW, FH, 12, 12);
   const fp = fg.attributes.position;
   for (let i = 0; i < fp.count; i++) {
     const x = fp.getX(i);
-    let y = fp.getY(i);
-    // the face sits on the lower-front of the skull, and the jaw narrows,
-    // so squeeze the plane's lower corners inward to follow it
+    const y = fp.getY(i);
+    // follow the jaw inward at the bottom
     const t = (y + FH / 2) / FH;              // 0 bottom … 1 top
-    const narrow = 1 - Math.pow(1 - t, 2.0) * 0.34;
-    const px = x * narrow;
-    const sy = y * 1.0;
-    const d2 = px * px + sy * sy;
-    const rr = R * 1.005;
-    const z = Math.sqrt(Math.max(0.0001, rr * rr - Math.min(d2, rr * rr * 0.94)));
-    fp.setXYZ(i, px, sy, z);
+    const px = x * (1 - Math.pow(1 - t, 2.0) * 0.3);
+
+    /* Sit the plane ON the flattened skull, not in front of it. Solve the
+       same two steps the skull went through — sphere, then the front-flatten
+       — for this point. Floating the face even a fraction proud of the head
+       is not a subtle error: it lights separately, and with shadows on it
+       casts eye-shaped shadows onto the cheeks, which is exactly as
+       unsettling as it sounds. */
+    const hy = y + FY;                        // height in head space
+    const r2 = Math.max(0, R * R - px * px - hy * hy);
+    const zs = Math.sqrt(r2);
+    const f = zs / R;
+    const z = zs * (1 - 0.3 * f * f) + R * 0.008;
+    fp.setXYZ(i, px, y, z);
   }
   fg.computeVertexNormals();
   const face = new THREE.Mesh(fg, mats.face);
-  face.position.y = -R * 0.06;
+  face.position.y = FY;
+  face.castShadow = false;
+  face.receiveShadow = false;
   g.add(face);
 
   return { group: g, R };
@@ -465,35 +467,42 @@ function buildHair(cfg, mats, R) {
   /* The rear mass is a CLOSED sphere pushed back into the skull rather than
      a partial shell. A partial shell has open edges, and you end up seeing
      its inside face as a stray black triangle from three-quarter angles. */
+  /* Its FRONT extent has to stay behind the flattened face. The skull's front
+     is at roughly 0.7R, not the 1.0R of a round sphere, so a rear mass sized
+     for a round head bulges straight through the cheeks and reads as a dark
+     mask over the eyes. Front here reaches 0.48R — comfortably buried. */
   const backCap = new THREE.Mesh(new THREE.SphereGeometry(R * 0.99, 22, 16), H);
-  backCap.position.set(0, R * 0.02, -R * 0.3);
-  backCap.scale.set(1.03, 1.02, 1.1);
-  backCap.castShadow = true;
+  backCap.position.set(0, R * 0.02, -R * 0.36);
+  backCap.scale.set(1.04, 1.02, 0.85);
   g.add(backCap);
 
   // ── bangs: broad locks hanging from the hairline to just above the brow ──
-  // Broad and overlapping. Narrow shards spaced apart read as a paper
-  // zigzag; hair is a mass with points cut into its edge.
+  /* Bangs hug the FLATTENED front (about 0.7R, not the 1.0R of a round
+     skull) and stop short of the brow. Left at sphere depth they stand proud
+     of the face; left at full length they hang over the eyes. Either way the
+     character loses its face, which is most of what made the last version
+     look like something out of a horror film. */
   const bangN = style === 'undercut' ? 5 : 7;
-  const bangLen = style === 'hime' ? R * 0.6 : R * 0.5;
+  const bangLen = style === 'hime' ? R * 0.46 : R * 0.4;
   for (let i = 0; i < bangN; i++) {
     const t = bangN === 1 ? 0.5 : i / (bangN - 1);
-    const a = (t - 0.5) * 1.75;
-    const len = bangLen * (0.78 + 0.5 * Math.abs(t - 0.5) * 2);
-    const s = new THREE.Mesh(shard(R * 0.42, len, 0.06), H);
-    s.position.set(Math.sin(a) * R * 0.78, R * 0.4, Math.cos(a) * R * 0.79);
-    s.rotation.set(0.16, a, (t - 0.5) * 0.42);
+    const a = (t - 0.5) * 1.7;
+    const len = bangLen * (0.8 + 0.45 * Math.abs(t - 0.5) * 2);
+    const s = new THREE.Mesh(shard(R * 0.36, len, 0.055), H);
+    s.position.set(Math.sin(a) * R * 0.66, R * 0.46, Math.cos(a) * R * 0.75);
+    s.rotation.set(0.1, a, (t - 0.5) * 0.36);
     g.add(s);
   }
 
   // ── side locks framing the cheeks ──
   if (style !== 'undercut' && style !== 'short') {
     const sideLen = (style === 'hime' || style === 'long' || style === 'twintails')
-      ? R * 2.0 : R * 1.0;
+      ? R * 1.8 : R * 0.95;
     for (const sd of [-1, 1]) {
-      const s = new THREE.Mesh(shard(R * 0.22, sideLen, 0.06), H);
-      s.position.set(sd * R * 0.92, R * 0.3, R * 0.24);
-      s.rotation.set(0.06, 0, sd * 0.13);
+      // narrow, and set back beside the cheek rather than across it
+      const s = new THREE.Mesh(shard(R * 0.16, sideLen, 0.055), H);
+      s.position.set(sd * R * 0.9, R * 0.34, R * 0.06);
+      s.rotation.set(0.04, sd * 0.25, sd * 0.1);
       g.add(s);
     }
   }
@@ -591,6 +600,13 @@ function buildHair(cfg, mats, R) {
       g.add(s);
     }
   }
+
+  /* Hair casts no shadow. It is a deliberate stylised-rendering choice, not
+     a saving: a fringe hanging over the brow throws the eyes into shade from
+     almost every sun angle, and a character whose eyes are a dark smudge has
+     no face at all. Every cel-shaded game drops this shadow for the same
+     reason. */
+  g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
 
   return g;
 }

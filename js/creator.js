@@ -200,8 +200,9 @@ export class Creator {
       this.pivot.remove(this.avatar);
       this.avatar.userData.dispose?.();
     }
+    // buildAvatar already decides what casts — notably the face decal must
+    // not, or it throws eye-shaped shadows across the cheeks
     this.avatar = buildAvatar(this.config);
-    this.avatar.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.pivot.add(this.avatar);
     this._syncList();
     saveAvatarConfig(this.config);
