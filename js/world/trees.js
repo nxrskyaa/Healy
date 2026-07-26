@@ -340,6 +340,10 @@ function goodSpot(x, z) {
   if (path < 5 && d < 70) return false;
   // keep the railway corridor clear
   if (z < -62 && z > -112) return false;
+  // and give the temple grounds their clearings
+  if (Math.hypot(x - 22, z - 26) < 8) return false;
+  if (Math.hypot(x - 55, z + 44) < 9) return false;
+  if (Math.hypot(x + 34, z + 6) < 7) return false;
   return true;
 }
 

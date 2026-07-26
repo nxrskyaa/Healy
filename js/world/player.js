@@ -3,150 +3,155 @@ import { heightAt, POND, WATER_LEVEL, WORLD_SIZE } from './terrain.js';
 import { clamp, damp } from './noise.js';
 
 /* ═══════════════════════════════════════════════════════════
-   The wanderer: a small figure in a straw hat, plus the
-   third-person camera that trails politely behind them.
+   The wanderer: a round little islander with a frangipani in
+   her hair, plus the third-person camera that trails politely
+   behind — or her own eyes, if you press V.
    ═══════════════════════════════════════════════════════════ */
 
 const L = (color) => new THREE.MeshLambertMaterial({ color });
 
-// One muted palette, nothing saturated: the figure should sit in the
-// landscape like a brushstroke, not float on it like a toy.
-const SKIN  = L('#d9b18c');
-const HAIR  = L('#2e2622');
-const CLOAK = L('#5a6577');
-const INNER = L('#e5dcc6');
-const PANTS = L('#3f444c');
-const STRAW = L('#c2a568');
-const BAND  = L('#8a4f3d');
-const BOOT  = L('#4a3d33');
-
-function limb(mat, w, h) {
-  const m = new THREE.Mesh(new THREE.CapsuleGeometry(w, h, 4, 10), mat);
-  m.castShadow = true;
-  return m;
-}
+const SKIN   = L('#e3b68c');
+const HAIR   = L('#241d19');
+const TOP    = L('#f2ead8');       // white kebaya
+const SARONG = L('#8c4436');       // terracotta wrap
+const SASH   = L('#c9992e');       // gold waist sash
+const PETAL  = L('#f6f1e2');
+const PISTIL = L('#e4b33c');
 
 export function createCharacter() {
   const root = new THREE.Group();
   root.name = 'player';
 
+  /* A round little islander. The whole figure is three readable shapes —
+     head, white top, terracotta sarong — with everything else kept to
+     accents. Chibi proportions: the head is nearly a third of the height,
+     which is what makes a figure at eight metres read as a character
+     instead of a mannequin. */
+
   const hips = new THREE.Group();
-  hips.position.y = 0.62;
+  hips.position.y = 0.5;
   root.add(hips);
 
-  /* The cloak is one smooth lathe: shoulders flowing out to a soft A-line
-     hem. A single continuous silhouette is what earlier versions lacked —
-     they were a stack of primitives, and read as one. */
+  // sarong: one smooth wrap from waist to ankle, gold band at the waist
   const prof = [];
-  const P = [
-    [0.001, 1.02], [0.11, 1.015], [0.155, 0.97], [0.185, 0.86],
-    [0.21, 0.68], [0.25, 0.46], [0.30, 0.24], [0.345, 0.06], [0.355, 0.02],
-  ];
-  for (const [x, y] of P) prof.push(new THREE.Vector2(x, y));
-  const cloak = new THREE.Mesh(new THREE.LatheGeometry(prof, 20), CLOAK);
+  for (const [x, y] of [
+    [0.20, 0.16], [0.225, 0.06], [0.235, -0.10], [0.235, -0.26],
+    [0.225, -0.38], [0.205, -0.45], [0.14, -0.47], [0.02, -0.475],
+  ]) prof.push(new THREE.Vector2(x, y));
+  const cloak = new THREE.Mesh(new THREE.LatheGeometry(prof, 18), SARONG);
   cloak.castShadow = true;
   hips.add(cloak);
 
-  // inner collar — one quiet accent, no more
-  const collar = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.115, 0.15, 0.1, 12, 1, true), INNER);
-  collar.position.y = 1.0;
-  hips.add(collar);
+  const sashBand = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.225, 0.09, 16), SASH);
+  sashBand.position.y = 0.17;
+  hips.add(sashBand);
+  // sash tail — the animator flutters this while running
+  const sashTail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.26, 0.02), SASH);
+  sashTail.position.set(0.05, 0.02, -0.22);
+  sashTail.rotation.x = 0.14;
+  hips.add(sashTail);
 
-  // satchel strap across the body, bag on the left hip
-  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.02, 5, 22, Math.PI * 1.05), BOOT);
-  strap.rotation.set(0.12, 0.25, 2.15);
-  strap.position.y = 0.62;
-  hips.add(strap);
-  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.14, 0.09), BOOT);
-  bag.position.set(-0.3, 0.28, -0.02);
-  bag.rotation.z = 0.15;
-  bag.castShadow = true;
-  hips.add(bag);
+  // white top: a soft rounded torso
+  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), TOP);
+  torso.scale.set(1, 1.15, 0.9);
+  torso.position.y = 0.34;
+  torso.castShadow = true;
+  hips.add(torso);
 
-  // head
+  // head: big, round, simple
   const neck = new THREE.Group();
-  neck.position.y = 1.14;
+  neck.position.y = 0.62;
   hips.add(neck);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.185, 18, 14), SKIN);
-  head.scale.set(0.96, 1.04, 0.94);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 20, 16), SKIN);
+  head.scale.set(1, 0.98, 0.98);
+  head.position.y = 0.16;
   head.castShadow = true;
   neck.add(head);
 
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.195, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), HAIR);
-  hair.position.y = 0.015;
-  hair.rotation.x = -0.12;
-  neck.add(hair);
-  // low ponytail, tucked under the hat
-  const tailHair = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 3, 8), HAIR);
-  tailHair.position.set(0, -0.06, -0.19);
-  tailHair.rotation.x = 0.5;
-  neck.add(tailHair);
+  // bob haircut: the fringe stops above the eyes — a face that is all hair
+  // is no face at all
+  const hairCap = new THREE.Mesh(
+    new THREE.SphereGeometry(0.285, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), HAIR);
+  hairCap.position.y = 0.17;
+  hairCap.rotation.x = 0.1;
+  neck.add(hairCap);
+  // the back and sides fall lower than the fringe
+  const hairBack = new THREE.Mesh(
+    new THREE.SphereGeometry(0.282, 18, 12, Math.PI * 0.7, Math.PI * 1.6, 0, Math.PI * 0.68), HAIR);
+  hairBack.position.set(0, 0.17, -0.01);
+  neck.add(hairBack);
 
-  // eyes only — a face at eight metres is two dark strokes, nothing else
+  // small bun, high on the back — doubles as the "hat" for the idle wobble
+  const hat = new THREE.Group();
+  const bun = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 10), HAIR);
+  bun.scale.set(1, 0.85, 1);
+  const bunTie = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 6, 14), SASH);
+  bunTie.rotation.x = Math.PI / 2;
+  bunTie.position.y = -0.055;
+  hat.add(bun, bunTie);
+  hat.position.set(0, 0.4, -0.13);
+  neck.add(hat);
+
+  // frangipani tucked over the right ear
+  const flower = new THREE.Group();
+  for (let i = 0; i < 5; i++) {
+    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), PETAL);
+    petal.scale.set(1, 0.45, 0.62);
+    const a = (i / 5) * Math.PI * 2;
+    petal.position.set(Math.cos(a) * 0.038, 0, Math.sin(a) * 0.038);
+    petal.rotation.y = -a;
+    flower.add(petal);
+  }
+  const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), PISTIL);
+  flower.add(pistil);
+  flower.scale.setScalar(0.72);
+  flower.position.set(0.225, 0.3, 0.055);
+  flower.rotation.set(0.4, 0.3, -1.15);
+  neck.add(flower);
+
+  // face: two dark eyes and warm cheeks, nothing else
   for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.02, 2, 6), HAIR);
-    eye.position.set(0.068 * s, 0.005, 0.168);
+    const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.024, 2, 6), HAIR);
+    eye.position.set(0.095 * s, 0.1, 0.245);
     neck.add(eye);
   }
 
-  // kasa: one wide shallow cone, a band, a top knot. Nothing shiny.
-  const hat = new THREE.Group();
-  const brim = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.17, 22, 1, true), STRAW);
-  brim.material = STRAW.clone();
-  brim.material.side = THREE.DoubleSide;
-  brim.castShadow = true;
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), STRAW);
-  knob.position.y = 0.1;
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.415, 0.42, 0.028, 22, 1, true), BAND);
-  band.position.y = -0.055;
-  hat.add(brim, knob, band);
-  hat.position.y = 0.21;
-  hat.rotation.x = 0.07;
-  neck.add(hat);
-
-  // arms: sleeves that belong to the cloak, small hands
+  // stubby arms, bare with a short white sleeve
   const mkArm = () => {
     const g = new THREE.Group();
-    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.34, 10), CLOAK);
-    sleeve.position.y = -0.16;
-    sleeve.castShadow = true;
-    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), SKIN);
-    hand.position.y = -0.35;
-    g.add(sleeve, hand);
+    const sleeve = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), TOP);
+    sleeve.scale.set(1, 1.2, 1);
+    sleeve.position.y = -0.03;
+    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.14, 3, 8), SKIN);
+    arm.position.y = -0.16;
+    arm.castShadow = true;
+    g.add(sleeve, arm);
     return g;
   };
-  const shoulderL = new THREE.Group(); shoulderL.position.set(-0.235, 0.96, 0);
-  const shoulderR = new THREE.Group(); shoulderR.position.set(0.235, 0.96, 0);
+  const shoulderL = new THREE.Group(); shoulderL.position.set(-0.21, 0.44, 0);
+  const shoulderR = new THREE.Group(); shoulderR.position.set(0.21, 0.44, 0);
   shoulderL.add(mkArm());
   shoulderR.add(mkArm());
-  shoulderL.rotation.z = 0.22;
-  shoulderR.rotation.z = -0.22;
+  shoulderL.rotation.z = 0.3;
+  shoulderR.rotation.z = -0.3;
   hips.add(shoulderL, shoulderR);
 
-  // legs: slim, dark, quiet
-  const mkLeg = () => {
-    const g = new THREE.Group();
-    const leg = limb(PANTS, 0.052, 0.3);
-    leg.position.y = -0.26;
-    const boot = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.09, 3, 8), BOOT);
-    boot.rotation.x = Math.PI / 2;
-    boot.position.set(0, -0.55, 0.045);
-    boot.castShadow = true;
-    g.add(leg, boot);
-    return g;
+  // tiny feet peeking from under the hem
+  const mkFoot = () => {
+    const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.07, 3, 8), SKIN);
+    f.rotation.x = Math.PI / 2;
+    f.position.set(0, -0.485, 0.05);
+    f.castShadow = true;
+    return f;
   };
-  const hipL = new THREE.Group(); hipL.position.set(-0.1, 0.0, 0);
-  const hipR = new THREE.Group(); hipR.position.set(0.1, 0.0, 0);
-  hipL.add(mkLeg());
-  hipR.add(mkLeg());
+  const hipL = new THREE.Group(); hipL.position.set(-0.09, 0, 0);
+  const hipR = new THREE.Group(); hipR.position.set(0.09, 0, 0);
+  hipL.add(mkFoot());
+  hipR.add(mkFoot());
   hips.add(hipL, hipR);
 
-  // the animator expects a scarfTail; give it the ponytail so the same
-  // run-flutter code moves the hair instead
-  root.userData = { hips, neck, hat, shoulderL, shoulderR, hipL, hipR, cloak, scarfTail: tailHair };
+  root.userData = { hips, neck, hat, shoulderL, shoulderR, hipL, hipR, cloak, scarfTail: sashTail, baseHipY: 0.5 };
   return root;
 }
 
@@ -172,7 +177,7 @@ export class Player {
 
     this.yaw = Math.PI;
     this.pitch = 0.28;
-    this.dist = 7.5;
+    this.dist = 6.2;
     this._camPos = new THREE.Vector3();
     this._look = new THREE.Vector3();
     this._first = true;
@@ -195,7 +200,7 @@ export class Player {
     this.vy = 0;
     this.yaw = Math.PI;
     this.pitch = 0.28;
-    this.dist = 7.5;
+    this.dist = 6.2;
     this.sitting = false;
     this._first = true;
   }
@@ -221,9 +226,11 @@ export class Player {
     this.speed = damp(this.speed, maxSpeed, 8, dt);
 
     if (moving) {
-      // camera-relative: forward is where you're looking
+      // camera-relative: forward is where you're looking.
+      // right = fwd rotated -90° about +Y, i.e. (-fwd.z, fwd.x) in xz — the
+      // previous sign was flipped, which swapped A and D.
       const fwd = new THREE.Vector2(Math.sin(this.yaw), Math.cos(this.yaw));
-      const right = new THREE.Vector2(fwd.y, -fwd.x);
+      const right = new THREE.Vector2(-fwd.y, fwd.x);
       const dir = new THREE.Vector2(
         fwd.x * mz + right.x * mx,
         fwd.y * mz + right.y * mx
@@ -304,7 +311,7 @@ export class Player {
     u.shoulderR.rotation.z = -0.14 - run * 0.1 - sit * 0.25;
 
     const bob = Math.abs(Math.sin(this.stride)) * 0.055 * clamp(this.speed / 3, 0, 1.2);
-    u.hips.position.y = 0.62 + bob - sit * 0.42 + Math.sin(t * 1.8) * 0.012 * (1 - run);
+    u.hips.position.y = u.baseHipY + bob - sit * 0.3 + Math.sin(t * 1.8) * 0.012 * (1 - run);
     u.hips.rotation.x = run * 0.14 + sit * 0.16;
     u.hips.rotation.z = Math.sin(this.stride) * 0.045 * run;
 
@@ -324,7 +331,7 @@ export class Player {
         ? Math.abs(Math.sin(this.stride)) * 0.05 * clamp(this.speed / 3, 0, 1.2)
         : 0;
       this.camera.position.set(
-        this.pos.x, this.pos.y + 1.5 + bob - this.sitBlend * 0.45, this.pos.z);
+        this.pos.x, this.pos.y + 1.3 + bob - this.sitBlend * 0.45, this.pos.z);
       // dragging up tilts the view up in both modes: the chase camera reads
       // pitch as its own height, the eyes read it inverted
       const cp = Math.cos(this.pitch), sp = Math.sin(-this.pitch);
@@ -337,7 +344,7 @@ export class Player {
       return;
     }
 
-    const target = this._look.set(this.pos.x, this.pos.y + 1.35, this.pos.z);
+    const target = this._look.set(this.pos.x, this.pos.y + 1.0, this.pos.z);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const desired = this._camPos.set(
       target.x - Math.sin(this.yaw) * cp * this.dist,

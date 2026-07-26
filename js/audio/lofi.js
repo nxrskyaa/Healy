@@ -409,11 +409,12 @@ export class AudioEngine {
       this._nextBird = t + 1.4 + Math.random() * 6.5;
     }
 
-    // the score: a slow pentatonic walk on D, felted bells, far away
+    // the score: a slow walk up and down pelog selisir — the gamelan's home
+    // scale — on felted bells, far away
     ease(this.mus, this.musicOn ? 0.3 : 0, clamp(dt, 0, 1));
     if (this.musicOn && t > this._nextNote) {
       const root = 146.83;   // D3
-      const pent = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+      const pent = [0, 1, 3, 7, 8, 12, 13, 15, 19, 20, 24];
       const step = [-2, -1, -1, 0, 1, 1, 2, 3][(Math.random() * 8) | 0];
       this._scaleIdx = clamp(this._scaleIdx + step, 0, pent.length - 1);
       const f = root * Math.pow(2, pent[this._scaleIdx] / 12);

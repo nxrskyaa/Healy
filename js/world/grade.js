@@ -12,6 +12,10 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 const PrintShader = {
   uniforms: {
     tDiffuse: { value: null },
+    uDepth: { value: null },
+    uCamNear: { value: 0.1 },
+    uCamFar: { value: 2200 },
+    uInk: { value: 0.55 },
     uTime: { value: 0 },
     uRes: { value: new THREE.Vector2(1, 1) },
     uSunScreen: { value: new THREE.Vector2(0.5, 0.5) },
@@ -36,9 +40,16 @@ const PrintShader = {
     precision highp float;
     varying vec2 vUv;
     uniform sampler2D tDiffuse;
+    uniform sampler2D uDepth;
     uniform float uTime, uExposure, uPaint, uVignette, uGrain, uSunAmt, uNight;
+    uniform float uCamNear, uCamFar, uInk;
     uniform vec2  uRes, uSunScreen;
     uniform vec3  uSunTint;
+
+    float linDepth(vec2 uv) {
+      float z = texture2D(uDepth, uv).x * 2.0 - 1.0;
+      return (2.0 * uCamNear * uCamFar) / (uCamFar + uCamNear - z * (uCamFar - uCamNear));
+    }
 
     float hash12(vec2 p) {
       vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -67,6 +78,11 @@ const PrintShader = {
       float r2 = dot(d, d);
 
       vec3 c = texture2D(tDiffuse, uv).rgb;
+      // last-chance firewall: a NaN must never reach the tonemap
+      if (!(c.r <= 0.0 || c.r >= 0.0)) c = vec3(0.0);
+      if (!(c.g <= 0.0 || c.g >= 0.0)) c = vec3(0.0);
+      if (!(c.b <= 0.0 || c.b >= 0.0)) c = vec3(0.0);
+      c = clamp(c, vec3(0.0), vec3(64.0));
 
       // ── light shafts: a cheap radial gather toward the sun ─────────────
       // Twelve taps marching toward the sun's screen position, keeping only
@@ -87,6 +103,27 @@ const PrintShader = {
         shaft /= wsum;
         float falloff = exp(-dot(toSun, toSun) * 2.2);
         c += shaft * uSunTint * uSunAmt * falloff * 0.5;
+      }
+
+      /* ── the ink line ────────────────────────────────────────────────────
+         A hand-drawn outline wherever something stands in front of the world
+         behind it. The threshold is RELATIVE depth, so grass blades against
+         the ground just behind them stay clean, while a figure, a tree, a
+         gate or the train against the far meadow takes a drawn edge — the
+         single trick that pushes the frame from render toward illustration. */
+      if (uInk > 0.01) {
+        vec2 px = 1.4 / uRes;
+        float dC = linDepth(uv);
+        float gap = 0.0;
+        gap = max(gap, linDepth(uv + vec2(px.x, 0.0)) - dC);
+        gap = max(gap, linDepth(uv - vec2(px.x, 0.0)) - dC);
+        gap = max(gap, linDepth(uv + vec2(0.0, px.y)) - dC);
+        gap = max(gap, linDepth(uv - vec2(0.0, px.y)) - dC);
+        // wobble the threshold so the line thickens and thins like a nib
+        float wob = 0.8 + 0.4 * vn2(uv * uRes * 0.11);
+        float ink = smoothstep(0.16 * dC * wob, 0.34 * dC * wob, gap);
+        ink *= smoothstep(360.0, 90.0, dC);          // the far field stays soft
+        c = mix(c, c * vec3(0.30, 0.34, 0.30) + vec3(0.006, 0.01, 0.012), ink * uInk);
       }
 
       // ── the print ───────────────────────────────────────────────────────

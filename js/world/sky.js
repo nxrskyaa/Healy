@@ -59,6 +59,18 @@ const skyFrag = /* glsl */`
     vec3 col = mix(uBot, uMid, smoothstep(-0.06, 0.28, h));
     col = mix(col, uTop, smoothstep(0.20, 0.78, h));
 
+    /* The air is not the same colour in every direction: it warms toward
+       the sun right down at the horizon and cools away from it. This one
+       asymmetry is most of what separates a painted sky from a gradient. */
+    vec2 dxz = normalize(d.xz + vec2(1e-5));
+    vec2 sxz = normalize(uSunDir.xz + vec2(1e-5));
+    float toSun = dot(dxz, sxz) * 0.5 + 0.5;
+    float horiz = 1.0 - smoothstep(0.0, 0.5, h);
+    col = mix(col, uSunCol, pow(toSun, 3.5) * horiz * uSunUp * 0.42);
+    col *= mix(vec3(1.0), vec3(0.93, 0.97, 1.05), pow(1.0 - toSun, 2.5) * horiz * uSunUp * 0.6);
+    // and the zenith saturates a little toward the anti-solar side
+    col *= mix(vec3(1.0), vec3(0.96, 0.985, 1.03), smoothstep(0.3, 0.9, h) * uSunUp * 0.5);
+
     // stars (fixed to the dome, twinkling gently)
     if (uStars > 0.01) {
       vec3 g = floor(d * 260.0);
@@ -84,6 +96,10 @@ const skyFrag = /* glsl */`
     // faint band of high cirrus so the sky is never flat
     float band = sin(d.x * 6.0 + d.z * 4.0 + uTime * 0.03) * 0.5 + 0.5;
     col += vec3(0.06, 0.05, 0.04) * band * smoothstep(0.05, 0.5, h) * uSunUp;
+
+    // dither the dome itself; a sky gradient must never band
+    float dth = hash31(d * 719.7);
+    col += (dth - 0.5) / 200.0;
 
     gl_FragColor = vec4(col, 1.0);
   }

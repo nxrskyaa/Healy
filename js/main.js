@@ -5,6 +5,20 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { LuminosityHighPassShader } from 'three/addons/shaders/LuminosityHighPassShader.js';
+
+/* NaN firewall on the bloom's bright pass. One non-finite texel anywhere in
+   the frame gets smeared across a whole neighbourhood by the downsample
+   chain and comes back as a huge dark rectangle. NaN fails every comparison
+   with itself, which is the only way to test for it in GLSL ES 1.00. */
+LuminosityHighPassShader.fragmentShader = LuminosityHighPassShader.fragmentShader.replace(
+  'vec4 texel = texture2D( tDiffuse, vUv );',
+  `vec4 texel = texture2D( tDiffuse, vUv );
+   if (!(texel.r <= 0.0 || texel.r >= 0.0)) texel = vec4(0.0);
+   if (!(texel.g <= 0.0 || texel.g >= 0.0)) texel = vec4(0.0);
+   if (!(texel.b <= 0.0 || texel.b >= 0.0)) texel = vec4(0.0);
+   texel.rgb = clamp(texel.rgb, vec3(0.0), vec3(48.0));`
+);
 
 import { startMenuArt } from './menuart.js';
 import { Input } from './input.js';
@@ -22,8 +36,9 @@ import {
   createGround, createOuterGround, createFlowers, createStones,
   createWater, createLilyPads, WATER_LEVEL,
 } from './world/terrain.js';
+import { buildBali } from './world/bali.js';
 import {
-  createCottage, createShrine, createLanterns, createJetty, createMushrooms,
+  createJetty, createMushrooms,
   createPetals, updatePetals, createFireflies, updateFireflies,
 } from './world/props.js';
 
@@ -109,7 +124,7 @@ input.on('escape', () => {
 
 let renderer, scene, camera, composer, bloom, print, fxaa;
 let sky, weather, wildlife, player, water, petals, fireflies, lilies;
-let cottage, lanterns, grass, forest, railway;
+let bali, grass, forest, railway;
 const clock = new THREE.Clock();
 let nightFactor = 0;
 
@@ -137,10 +152,20 @@ function initRenderer() {
   });
 
   composer = new EffectComposer(renderer, target);
+  /* The scene itself is drawn into the composer's SECOND buffer (RenderPass
+     renders into the read buffer), so that is the one whose depth the ink
+     pass needs. It must never hang off the first buffer: the print pass
+     renders INTO that one while sampling depth, which is a feedback loop and
+     comes out as garbage rectangles. */
+  composer.renderTarget2.depthTexture = new THREE.DepthTexture(dbs.x, dbs.y);
+
   composer.addPass(new RenderPass(scene, camera));
   bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.75, 0.82);
   composer.addPass(bloom);
   print = createPrintPass();
+  print.uniforms.uDepth.value = composer.renderTarget2.depthTexture;
+  print.uniforms.uCamNear.value = camera.near;
+  print.uniforms.uCamFar.value = camera.far;
   composer.addPass(print);
   fxaa = new ShaderPass(FXAAShader);
   composer.addPass(fxaa);
@@ -161,6 +186,16 @@ function onResize() {
   fxaa.material.uniforms.resolution.value.set(1 / dbs.x, 1 / dbs.y);
   print.uniforms.uRes.value.set(dbs.x, dbs.y);
   if (grass) grass.setViewport(camera.fov, dbs.y);
+
+  // setSize does not reallocate an attached depth texture, and a stale-sized
+  // depth attachment makes the whole framebuffer undefined — rebuild it
+  const rt2 = composer.renderTarget2;
+  if (rt2.depthTexture && (rt2.depthTexture.image.width !== dbs.x || rt2.depthTexture.image.height !== dbs.y)) {
+    rt2.depthTexture.dispose();
+    rt2.depthTexture = new THREE.DepthTexture(dbs.x, dbs.y);
+    rt2.dispose();
+    print.uniforms.uDepth.value = rt2.depthTexture;
+  }
 }
 
 /* ── world build ── */
@@ -186,10 +221,9 @@ async function buildWorld() {
       lilies = createLilyPads(30);
       scene.add(water, lilies, createJetty());
     }],
-    ['raising the cottage', () => {
-      cottage = createCottage();
-      lanterns = createLanterns([[6, 4], [-4, -12], [14, -18], [-16, 6], [26, 12], [-30, 30]]);
-      scene.add(cottage, lanterns, createShrine(), createMushrooms(60));
+    ['raising the temple gates', () => {
+      bali = buildBali(scene);
+      scene.add(createMushrooms(60));
     }],
     ['waking the animals', () => { wildlife = new Wildlife(scene); }],
     ['seeding the clouds', () => { weather = new Weather(scene, LOW_END ? { streaks: 2200, splashes: 120 } : {}); }],
@@ -216,7 +250,7 @@ async function buildWorld() {
   }
   el.bar.style.width = '100%';
   state.built = true;
-  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, wildlife, audio, state, step };
+  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, bali, wildlife, audio, state, step };
 }
 
 /* ── flow ── */
@@ -370,13 +404,11 @@ function step(dt, t) {
     pad.rotation.z += 0.04 * dt;
   }
 
-  // lamps after dusk
-  const lampK = clamp(nightFactor * 1.2, 0, 1);
-  for (const g of cottage.userData.glows) g.material.opacity = lampK * 0.95;
-  cottage.userData.lamp.intensity = lampK * 1.5;
+  // the lanterns come alive after dusk — and glow faintly under rain-dark skies
+  const lampK = clamp(nightFactor * 1.2 + rain * 0.25, 0, 1);
   const flicker = 0.85 + Math.sin(t * 7.3) * 0.08 + Math.sin(t * 13.7) * 0.07;
-  for (const g of lanterns.userData.glows) g.material.opacity = lampK * flicker;
-  for (const l of lanterns.userData.lights) l.intensity = lampK * flicker * 1.6;
+  for (const m of bali.glowMats) m.emissiveIntensity = lampK * (0.55 + flicker * 0.6);
+  for (const l of bali.lights) l.intensity = lampK * flicker * 1.7;
 
   updatePetals(petals, dt, t, p, wind * 0.5);
   updateFireflies(fireflies, dt, t, nightFactor * (1 - rain * 0.6));
