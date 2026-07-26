@@ -20,6 +20,7 @@ const rainVert = /* glsl */`
   uniform float uSlant;
   varying float vY;
   varying float vRand;
+  varying float vNear;
 
   void main() {
     // wrap the drop into a box centred on the camera
@@ -28,6 +29,10 @@ const rainVert = /* glsl */`
     p.z = uCenter.z + mod(aOffset.z - uCenter.z + ${BOX_R}.0, ${BOX_R * 2}.0) - ${BOX_R}.0;
     float fall = mod(aOffset.y - uTime * aSpeed * 14.0, ${BOX_H}.0);
     p.y = uCenter.y - ${BOX_H / 2}.0 + fall;
+
+    // a drop that wraps right onto the lens becomes a screen-wide white bar —
+    // fade anything closer than a couple of metres
+    vNear = smoothstep(0.8, 2.6, distance(p, uCenter));
 
     vec4 mv = viewMatrix * vec4(p, 1.0);
     float len = aScale * 1.05;
@@ -44,11 +49,12 @@ const rainFrag = /* glsl */`
   precision mediump float;
   varying float vY;
   varying float vRand;
+  varying float vNear;
   uniform float uOpacity;
   uniform vec3  uColor;
   void main() {
     float a = smoothstep(0.0, 0.25, vY) * smoothstep(1.0, 0.55, vY);
-    gl_FragColor = vec4(uColor, a * uOpacity * (0.45 + vRand * 0.4));
+    gl_FragColor = vec4(uColor, a * uOpacity * vNear * (0.45 + vRand * 0.4));
   }
 `;
 
@@ -185,10 +191,10 @@ export class Weather {
   toggle() { this.set(this.target > 0.05 ? 0 : 0.85); return this.target > 0.05; }
 
   label() {
-    if (this.target < 0.05) return ['🌤', 'Cerah'];
-    if (this.target < 0.45) return ['🌦', 'Gerimis'];
-    if (this.target < 0.8) return ['🌧', 'Hujan'];
-    return ['⛈', 'Hujan Deras'];
+    if (this.target < 0.05) return 'Clear';
+    if (this.target < 0.45) return 'Drizzle';
+    if (this.target < 0.8) return 'Rain';
+    return 'Heavy rain';
   }
 
   /** Stamp a single ripple on the ground — used for footfalls and landings. */

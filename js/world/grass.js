@@ -68,8 +68,13 @@ export function buildTerrainTexture(size, span) {
       const ragged = worldEdge * (0.9 + fbm(x * 0.006, z * 0.006, 2) * 0.22);
       mask *= 1 - smoothstep(ragged * 0.82, ragged, d);
 
+      // the sampler clamps at the border, so the outermost texels repeat
+      // forever past the span — they must carry no grass at all, or the
+      // horizon grows a solid hedge of the last texel's blades
+      const border = (i < 2 || j < 2 || i >= size - 2 || j >= size - 2) ? 0 : 1;
+
       data[k * 4] = h;
-      data[k * 4 + 1] = clamp(mask, 0, 1);
+      data[k * 4 + 1] = clamp(mask, 0, 1) * border;
       data[k * 4 + 2] = 1 - ny;
       data[k * 4 + 3] = fbm(x * 0.035, z * 0.035, 3) * 0.5 + 0.5;
     }
@@ -328,8 +333,9 @@ void main() {
   float dryness = smoothstep(0.5, 0.95, tint) * 0.55 + smoothstep(0.62, 1.0, clumpA) * 0.3;
   col = mix(col, dry, clamp(dryness, 0.0, 0.85) * smoothstep(0.25, 1.0, t));
 
-  // broad patches of cooler and warmer grass — a meadow never settles on one green
-  col *= mix(vec3(0.80, 1.0, 0.96), vec3(1.18, 1.0, 0.72), tint);
+  // broad patches of cooler and warmer grass — a meadow never settles on one
+  // green. Warm on both ends: the cool patches go deep, not minty.
+  col *= mix(vec3(0.84, 1.0, 0.86), vec3(1.2, 1.02, 0.68), tint);
   col *= mix(vec3(0.93, 1.0, 0.94), vec3(1.06, 1.0, 0.9), clumpA);
   col *= 0.76 + aRand.z * 0.46;
 
@@ -540,10 +546,10 @@ export class GrassField {
       u.uCenter.value.copy(camera.position);
       u.uCamPos.value.copy(camera.position);
       u.uSunDir.value.copy(sky.sunUp > 0.02 ? sky.sunDir : sky.moonDir);
-      u.uSunColor.value.copy(sky.sun.color).multiplyScalar(sky.sun.intensity * 0.55);
+      u.uSunColor.value.copy(sky.sun.color).multiplyScalar(sky.sun.intensity * 0.62);
       u.uAmbSky.value.copy(sky.ambient.color);
       u.uAmbGround.value.copy(sky.ambient.groundColor);
-      u.uAmbIntensity.value = sky.ambient.intensity;
+      u.uAmbIntensity.value = sky.ambient.intensity * 0.85;
       u.uFogColor.value.copy(sky.scene.fog.color);
       u.uFogDensity.value = sky.scene.fog.density;
       u.uCull.value.set(fx / flat, fz / flat, cosCone);

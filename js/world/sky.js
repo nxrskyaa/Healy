@@ -248,7 +248,7 @@ export class Sky {
     this.fillLight.position.set(-1, 0.6, -0.8);
     scene.add(this.fillLight);
 
-    scene.fog = new THREE.FogExp2(0xdcf0f4, 0.0062);
+    scene.fog = new THREE.FogExp2(0xdcf0f4, 0.0048);
     this._sample(this.time);
   }
 
@@ -284,13 +284,13 @@ export class Sky {
   /** Human-readable label for the HUD. */
   label() {
     const t = this.time;
-    if (t < 0.06) return ['🌅', 'Fajar'];
-    if (t < 0.20) return ['🌤', 'Pagi'];
-    if (t < 0.33) return ['☀️', 'Siang'];
-    if (t < 0.46) return ['🌞', 'Sore'];
-    if (t < 0.55) return ['🌇', 'Senja'];
-    if (t < 0.64) return ['🌆', 'Petang'];
-    return ['🌙', 'Malam'];
+    if (t < 0.06) return 'Dawn';
+    if (t < 0.20) return 'Morning';
+    if (t < 0.33) return 'Midday';
+    if (t < 0.46) return 'Afternoon';
+    if (t < 0.55) return 'Golden hour';
+    if (t < 0.64) return 'Dusk';
+    return 'Night';
   }
 
   update(dt, elapsed, camera, timeScale = 1) {
@@ -353,7 +353,7 @@ export class Sky {
     const r = clamp(rain, 0, 1);
     this.sun.intensity = this.sunIntensity * (1 - r * 0.62);
     this.ambient.intensity *= (1 - r * 0.2);
-    this.scene.fog.density = 0.0062 + r * 0.011;
+    this.scene.fog.density = 0.0048 + r * 0.011;
     this.scene.fog.color.lerp(new THREE.Color('#93a8ae'), r * 0.55);
     this.fogColor.copy(this.scene.fog.color);
     for (const m of this.cloudMats) m.color.lerp(new THREE.Color('#7d8b96'), r * 0.6);

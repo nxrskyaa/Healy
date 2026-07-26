@@ -7,22 +7,21 @@ import { clamp, damp } from './noise.js';
    third-person camera that trails politely behind them.
    ═══════════════════════════════════════════════════════════ */
 
-const L = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, ...opts });
+const L = (color) => new THREE.MeshLambertMaterial({ color });
 
-const SKIN  = L('#f0cba4');
-const HAIR  = L('#3d2f2a');
-const CLOAK = L('#d98f4e');
-const SHIRT = L('#f2ead6');
-const PANTS = L('#5c6f7a');
-const STRAW = L('#e3c579');
-const SCARF = L('#c25b4e');
-const DARK  = L('#241f22');
-const BOOT  = L('#6d4f3a');
+// One muted palette, nothing saturated: the figure should sit in the
+// landscape like a brushstroke, not float on it like a toy.
+const SKIN  = L('#d9b18c');
+const HAIR  = L('#2e2622');
+const CLOAK = L('#5a6577');
+const INNER = L('#e5dcc6');
+const PANTS = L('#3f444c');
+const STRAW = L('#c2a568');
+const BAND  = L('#8a4f3d');
+const BOOT  = L('#4a3d33');
 
-function limb(mat, w, h, d) {
-  const g = new THREE.CapsuleGeometry(w, h, 3, 7);
-  const m = new THREE.Mesh(g, mat);
-  m.scale.z = d;
+function limb(mat, w, h) {
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(w, h, 4, 10), mat);
   m.castShadow = true;
   return m;
 }
@@ -35,96 +34,119 @@ export function createCharacter() {
   hips.position.y = 0.62;
   root.add(hips);
 
-  // torso: a soft cone reads as a little cloak
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.34, 0.62, 10), SHIRT);
-  torso.position.y = 0.3;
-  torso.castShadow = true;
-  hips.add(torso);
-
-  const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.44, 0.78, 12, 1, true), CLOAK);
-  cloak.position.y = 0.26;
+  /* The cloak is one smooth lathe: shoulders flowing out to a soft A-line
+     hem. A single continuous silhouette is what earlier versions lacked —
+     they were a stack of primitives, and read as one. */
+  const prof = [];
+  const P = [
+    [0.001, 1.02], [0.11, 1.015], [0.155, 0.97], [0.185, 0.86],
+    [0.21, 0.68], [0.25, 0.46], [0.30, 0.24], [0.345, 0.06], [0.355, 0.02],
+  ];
+  for (const [x, y] of P) prof.push(new THREE.Vector2(x, y));
+  const cloak = new THREE.Mesh(new THREE.LatheGeometry(prof, 20), CLOAK);
   cloak.castShadow = true;
   hips.add(cloak);
-  cloak.material.side = THREE.DoubleSide;
 
-  const scarf = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.055, 6, 14), SCARF);
-  scarf.rotation.x = Math.PI / 2;
-  scarf.position.y = 0.6;
-  hips.add(scarf);
-  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.34, 0.05), SCARF);
-  tail.position.set(0.1, 0.44, -0.16);
-  hips.add(tail);
+  // inner collar — one quiet accent, no more
+  const collar = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.115, 0.15, 0.1, 12, 1, true), INNER);
+  collar.position.y = 1.0;
+  hips.add(collar);
+
+  // satchel strap across the body, bag on the left hip
+  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.02, 5, 22, Math.PI * 1.05), BOOT);
+  strap.rotation.set(0.12, 0.25, 2.15);
+  strap.position.y = 0.62;
+  hips.add(strap);
+  const bag = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.14, 0.09), BOOT);
+  bag.position.set(-0.3, 0.28, -0.02);
+  bag.rotation.z = 0.15;
+  bag.castShadow = true;
+  hips.add(bag);
 
   // head
   const neck = new THREE.Group();
-  neck.position.y = 0.66;
+  neck.position.y = 1.14;
   hips.add(neck);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.235, 16, 14), SKIN);
-  head.scale.set(1, 1.05, 0.96);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.185, 18, 14), SKIN);
+  head.scale.set(0.96, 1.04, 0.94);
   head.castShadow = true;
   neck.add(head);
 
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.245, 16, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), HAIR);
-  hair.position.y = 0.02;
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.195, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.58), HAIR);
+  hair.position.y = 0.015;
+  hair.rotation.x = -0.12;
   neck.add(hair);
-  const fringe = new THREE.Mesh(new THREE.SphereGeometry(0.2, 12, 10), HAIR);
-  fringe.scale.set(1.08, 0.5, 0.7);
-  fringe.position.set(0, 0.12, 0.09);
-  neck.add(fringe);
+  // low ponytail, tucked under the hat
+  const tailHair = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.16, 3, 8), HAIR);
+  tailHair.position.set(0, -0.06, -0.19);
+  tailHair.rotation.x = 0.5;
+  neck.add(tailHair);
 
+  // eyes only — a face at eight metres is two dark strokes, nothing else
   for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.031, 8, 8), DARK);
-    eye.position.set(0.082 * s, 0.01, 0.215);
-    eye.scale.set(0.8, 1.25, 0.6);
+    const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.02, 2, 6), HAIR);
+    eye.position.set(0.068 * s, 0.005, 0.168);
     neck.add(eye);
-    const blush = new THREE.Mesh(new THREE.CircleGeometry(0.045, 10), L('#e79a95', { transparent: true, opacity: 0.55 }));
-    blush.position.set(0.145 * s, -0.05, 0.185);
-    blush.rotation.y = 0.4 * s;
-    neck.add(blush);
   }
 
-  // straw hat
+  // kasa: one wide shallow cone, a band, a top knot. Nothing shiny.
   const hat = new THREE.Group();
-  const brim = new THREE.Mesh(new THREE.ConeGeometry(0.46, 0.14, 16), STRAW);
-  brim.position.y = 0.2;
-  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.2, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), STRAW);
-  crown.position.y = 0.21;
-  const band = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.022, 6, 16), SCARF);
-  band.rotation.x = Math.PI / 2;
-  band.position.y = 0.235;
-  hat.add(brim, crown, band);
-  hat.position.y = 0.06;
+  const brim = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.17, 22, 1, true), STRAW);
+  brim.material = STRAW.clone();
+  brim.material.side = THREE.DoubleSide;
   brim.castShadow = true;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), STRAW);
+  knob.position.y = 0.1;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(0.415, 0.42, 0.028, 22, 1, true), BAND);
+  band.position.y = -0.055;
+  hat.add(brim, knob, band);
+  hat.position.y = 0.21;
+  hat.rotation.x = 0.07;
   neck.add(hat);
 
-  // limbs
-  const armL = limb(SKIN, 0.062, 0.28, 1);
-  const armR = limb(SKIN, 0.062, 0.28, 1);
-  const sleeveL = new THREE.Mesh(new THREE.CylinderGeometry(0.085, 0.075, 0.24, 8), CLOAK);
-  const sleeveR = sleeveL.clone();
-  const shoulderL = new THREE.Group(); shoulderL.position.set(-0.29, 0.52, 0);
-  const shoulderR = new THREE.Group(); shoulderR.position.set(0.29, 0.52, 0);
-  armL.position.y = -0.22; armR.position.y = -0.22;
-  sleeveL.position.y = -0.09; sleeveR.position.y = -0.09;
-  shoulderL.add(armL, sleeveL);
-  shoulderR.add(armR, sleeveR);
+  // arms: sleeves that belong to the cloak, small hands
+  const mkArm = () => {
+    const g = new THREE.Group();
+    const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.34, 10), CLOAK);
+    sleeve.position.y = -0.16;
+    sleeve.castShadow = true;
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.042, 8, 8), SKIN);
+    hand.position.y = -0.35;
+    g.add(sleeve, hand);
+    return g;
+  };
+  const shoulderL = new THREE.Group(); shoulderL.position.set(-0.235, 0.96, 0);
+  const shoulderR = new THREE.Group(); shoulderR.position.set(0.235, 0.96, 0);
+  shoulderL.add(mkArm());
+  shoulderR.add(mkArm());
+  shoulderL.rotation.z = 0.22;
+  shoulderR.rotation.z = -0.22;
   hips.add(shoulderL, shoulderR);
 
-  const legL = limb(PANTS, 0.075, 0.3, 1);
-  const legR = limb(PANTS, 0.075, 0.3, 1);
-  const hipL = new THREE.Group(); hipL.position.set(-0.12, 0.0, 0);
-  const hipR = new THREE.Group(); hipR.position.set(0.12, 0.0, 0);
-  legL.position.y = -0.24; legR.position.y = -0.24;
-  const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.25), BOOT);
-  const bootR = bootL.clone();
-  bootL.position.set(0, -0.46, 0.04); bootR.position.set(0, -0.46, 0.04);
-  bootL.castShadow = true; bootR.castShadow = true;
-  hipL.add(legL, bootL);
-  hipR.add(legR, bootR);
+  // legs: slim, dark, quiet
+  const mkLeg = () => {
+    const g = new THREE.Group();
+    const leg = limb(PANTS, 0.052, 0.3);
+    leg.position.y = -0.26;
+    const boot = new THREE.Mesh(new THREE.CapsuleGeometry(0.055, 0.09, 3, 8), BOOT);
+    boot.rotation.x = Math.PI / 2;
+    boot.position.set(0, -0.55, 0.045);
+    boot.castShadow = true;
+    g.add(leg, boot);
+    return g;
+  };
+  const hipL = new THREE.Group(); hipL.position.set(-0.1, 0.0, 0);
+  const hipR = new THREE.Group(); hipR.position.set(0.1, 0.0, 0);
+  hipL.add(mkLeg());
+  hipR.add(mkLeg());
   hips.add(hipL, hipR);
 
-  root.userData = { hips, neck, hat, shoulderL, shoulderR, hipL, hipR, cloak, scarfTail: tail };
+  // the animator expects a scarfTail; give it the ponytail so the same
+  // run-flutter code moves the hair instead
+  root.userData = { hips, neck, hat, shoulderL, shoulderR, hipL, hipR, cloak, scarfTail: tailHair };
   return root;
 }
 
@@ -156,7 +178,16 @@ export class Player {
     this._first = true;
 
     this.splashCallback = null;
+    this.stepCallback = null;
+    this.firstPerson = false;
     this._stepTimer = 0;
+  }
+
+  toggleView() {
+    this.firstPerson = !this.firstPerson;
+    this.mesh.visible = !this.firstPerson;
+    if (!this.firstPerson) this._first = true;   // snap the chase camera back
+    return this.firstPerson;
   }
 
   reset() {
@@ -174,7 +205,8 @@ export class Player {
   update(dt, t, input) {
     // ── look ──────────────────────────────────────────────
     this.yaw -= input.look.x * 0.0032;
-    this.pitch = clamp(this.pitch + input.look.y * 0.0026, -0.5, 1.15);
+    this.pitch = clamp(this.pitch + input.look.y * 0.0026,
+      this.firstPerson ? -1.2 : -0.5, 1.15);
     this.dist = clamp(this.dist + input.zoom * 0.0075, 3.2, 17);
     input.consumeLook();
 
@@ -232,6 +264,7 @@ export class Player {
       if (this._stepTimer <= 0) {
         this._stepTimer = 1.7;
         if (this.splashCallback) this.splashCallback(this.pos, 0.35);
+        if (this.stepCallback) this.stepCallback(this.speed);
       }
     }
 
@@ -278,11 +311,32 @@ export class Player {
     u.neck.rotation.x = -run * 0.1 + Math.sin(t * 1.4) * 0.02 + sit * 0.1;
     u.neck.rotation.z = Math.sin(t * 0.9) * 0.03;
     u.hat.rotation.z = Math.sin(t * 2.2) * 0.02 + run * 0.03;
-    u.scarfTail.rotation.x = -0.3 - run * 0.9 - Math.sin(t * 6) * 0.15 * run;
+    u.scarfTail.rotation.x = 0.5 + run * 0.6 + Math.sin(t * 6) * 0.15 * run;
     u.cloak.rotation.x = run * 0.06;
+    // the hem swings a beat behind the stride
+    u.cloak.rotation.z = Math.sin(this.stride - 0.6) * 0.05 * run;
   }
 
   _camera(dt) {
+    if (this.firstPerson) {
+      // eyes in the head: no chase, no smoothing lag on the body itself
+      const bob = this.onGround
+        ? Math.abs(Math.sin(this.stride)) * 0.05 * clamp(this.speed / 3, 0, 1.2)
+        : 0;
+      this.camera.position.set(
+        this.pos.x, this.pos.y + 1.5 + bob - this.sitBlend * 0.45, this.pos.z);
+      // dragging up tilts the view up in both modes: the chase camera reads
+      // pitch as its own height, the eyes read it inverted
+      const cp = Math.cos(this.pitch), sp = Math.sin(-this.pitch);
+      this._look.set(
+        this.pos.x + Math.sin(this.yaw) * cp,
+        this.camera.position.y + sp,
+        this.pos.z + Math.cos(this.yaw) * cp
+      );
+      this.camera.lookAt(this._look);
+      return;
+    }
+
     const target = this._look.set(this.pos.x, this.pos.y + 1.35, this.pos.z);
     const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
     const desired = this._camPos.set(

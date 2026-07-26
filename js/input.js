@@ -46,7 +46,7 @@ export class Input {
       if (k === 't') this._fire('time');
       if (k === 'm') this._fire('music');
       if (k === 'h') this._fire('hud');
-      if (k === 'p') this._fire('photo');
+      if (k === 'v') this._fire('view');
     });
 
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));

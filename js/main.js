@@ -15,14 +15,15 @@ import { Wildlife } from './world/animals.js';
 import { Player } from './world/player.js';
 import { clamp, damp } from './world/noise.js';
 import { GrassField } from './world/grass.js';
-import { createPainterlyPass } from './world/grade.js';
+import { Forest } from './world/trees.js';
+import { Railway } from './world/train.js';
+import { createPrintPass, updatePrintPass } from './world/grade.js';
 import {
   createGround, createOuterGround, createFlowers, createStones,
   createWater, createLilyPads, WATER_LEVEL,
 } from './world/terrain.js';
 import {
-  createForest, createGreatTree, createCottage, createShrine,
-  createLanterns, createJetty, createMushrooms,
+  createCottage, createShrine, createLanterns, createJetty, createMushrooms,
   createPetals, updatePetals, createFireflies, updateFireflies,
 } from './world/props.js';
 
@@ -55,11 +56,18 @@ const state = {
   hudVisible: true,
 };
 
+const LOW_END = matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+// Adaptive resolution: measure the real frame time once running and give
+// back pixels twice if it asks. There is no other honest way to know what
+// GPU this is.
+const quality = { ss: LOW_END ? 0.8 : 1.0, frames: 0, sum: 0, steps: 0 };
+
 const audio = new AudioEngine();
 const input = new Input(el.canvas);
-let stopMenuArt = startMenuArt($('menu-canvas'));
+startMenuArt($('menu-canvas'));
 
-/* ───────────────────────── screens ───────────────────────── */
+/* ── screens ── */
 
 function show(name) {
   for (const s of screens) $(s).classList.toggle('active', s === name);
@@ -72,7 +80,7 @@ function openPanel(name) {
   show(name);
 }
 
-function toast(msg, ms = 1900) {
+function toast(msg, ms = 2100) {
   el.toast.textContent = msg;
   el.toast.classList.add('show');
   clearTimeout(toast._t);
@@ -97,31 +105,21 @@ input.on('escape', () => {
   else if (state.screen === null || state.screen === 'world') pauseWorld();
 });
 
-/* ───────────────────────── renderer ───────────────────────── */
+/* ── renderer ── */
 
-let renderer, scene, camera, composer, bloom, painterly, fxaa;
-let sky, weather, wildlife, player, water, petals, fireflies, lilies, cottage, lanterns, grass;
-let windUniforms;
-const LOW_END = matchMedia('(hover: none) and (pointer: coarse)').matches;
-
-// Adaptive resolution. A million blades is a very different proposition on a
-// desktop GPU and on an integrated one, and there is no way to know which you
-// are on until you draw a frame — so measure, and give back pixels if needed.
-const quality = { ss: 1, frames: 0, sum: 0, steps: 0 };
+let renderer, scene, camera, composer, bloom, print, fxaa;
+let sky, weather, wildlife, player, water, petals, fireflies, lilies;
+let cottage, lanterns, grass, forest, railway;
 const clock = new THREE.Clock();
 let nightFactor = 0;
 
 function initRenderer() {
   renderer = new THREE.WebGLRenderer({
-    canvas: el.canvas, antialias: true, powerPreference: 'high-performance',
+    canvas: el.canvas, antialias: false, powerPreference: 'high-performance',
   });
-  // A touch of supersample on top of the device ratio: the composite always
-  // resolves DOWN to the canvas, which is what keeps a million hairline blades
-  // from turning into a field of sparkling shards.
-  quality.ss = LOW_END ? 0.85 : 1.0;
-  renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, 2));
+  renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, LOW_END ? 1.6 : 2));
   renderer.setSize(innerWidth, innerHeight);
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = !LOW_END;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.NoToneMapping;
@@ -130,10 +128,8 @@ function initRenderer() {
   camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 2200);
   camera.position.set(0, 6, 16);
 
-  // EffectComposer renders the scene into a target, which silently discards the
-  // renderer's own `antialias`. Grass is nothing but edges, so the multisampled
-  // target below is the single biggest thing standing between this and a mess
-  // of jagged slivers.
+  // The composer's target replaces the renderer's own antialiasing, so it has
+  // to be multisampled itself — a grass field is nothing but edges.
   const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
   const target = new THREE.WebGLRenderTarget(dbs.x, dbs.y, {
     type: THREE.HalfFloatType,
@@ -142,16 +138,13 @@ function initRenderer() {
 
   composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
-  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.34, 0.7, 0.86);
+  bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.75, 0.82);
   composer.addPass(bloom);
-  painterly = createPainterlyPass();
-  composer.addPass(painterly);
-  composer.addPass(new OutputPass());
-
-  // and a luma FXAA on the resolved image to soften whatever MSAA could not
-  // see — sub-pixel blade tips, mostly
+  print = createPrintPass();
+  composer.addPass(print);
   fxaa = new ShaderPass(FXAAShader);
   composer.addPass(fxaa);
+  composer.addPass(new OutputPass());
 
   addEventListener('resize', onResize);
   onResize();
@@ -166,52 +159,51 @@ function onResize() {
 
   const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
   fxaa.material.uniforms.resolution.value.set(1 / dbs.x, 1 / dbs.y);
+  print.uniforms.uRes.value.set(dbs.x, dbs.y);
   if (grass) grass.setViewport(camera.fov, dbs.y);
 }
 
-/* ───────────────────────── world build ───────────────────────── */
+/* ── world build ── */
 
-// A macrotask yield rather than rAF: the loader has to keep making progress
-// even when the tab is in the background and animation frames are throttled.
 const yieldToUI = () => new Promise((r) => setTimeout(r, 16));
 
 async function buildWorld() {
   const steps = [
-    ['menyiapkan kanvas…', () => initRenderer()],
-    ['melukis langit…', () => { sky = new Sky(scene); }],
-    ['membentuk perbukitan…', () => {
-      windUniforms = { uTime: { value: 0 }, uWind: { value: 0.6 } };
-      scene.add(createGround(), createOuterGround());
-    }],
-    ['menumbuhkan setengah juta helai rumput…', () => {
+    ['preparing the canvas', () => initRenderer()],
+    ['painting the sky', () => { sky = new Sky(scene); }],
+    ['shaping the hills', () => { scene.add(createGround(), createOuterGround()); }],
+    ['growing the meadow', () => {
       grass = new GrassField(scene, LOW_END
         ? { lowEnd: true, mapSize: 384 }
         : { mapSize: 512 });
       onResize();
     }],
-    ['menyemai bunga liar…', () => { scene.add(createFlowers(2400)); scene.add(createStones(120)); }],
-    ['menanam hutan…', () => { scene.add(createForest(windUniforms, 180)); }],
-    ['membangunkan pohon tua…', () => { scene.add(createGreatTree(windUniforms)); scene.add(createMushrooms(70)); }],
-    ['menuang air ke telaga…', () => {
+    ['scattering wildflowers', () => { scene.add(createFlowers(LOW_END ? 900 : 2200), createStones(110)); }],
+    ['planting the forest', () => { forest = new Forest(scene); }],
+    ['laying the railway', () => { railway = new Railway(scene); }],
+    ['filling the pond', () => {
       water = createWater();
-      lilies = createLilyPads(32);
+      lilies = createLilyPads(30);
       scene.add(water, lilies, createJetty());
     }],
-    ['mendirikan rumah kecil…', () => {
+    ['raising the cottage', () => {
       cottage = createCottage();
       lanterns = createLanterns([[6, 4], [-4, -12], [14, -18], [-16, 6], [26, 12], [-30, 30]]);
-      scene.add(cottage, lanterns, createShrine());
+      scene.add(cottage, lanterns, createShrine(), createMushrooms(60));
     }],
-    ['memanggil penghuni…', () => { wildlife = new Wildlife(scene); }],
-    ['menurunkan hujan…', () => { weather = new Weather(scene); }],
-    ['menebar kelopak…', () => {
-      petals = createPetals(400);
-      fireflies = createFireflies(280);
+    ['waking the animals', () => { wildlife = new Wildlife(scene); }],
+    ['seeding the clouds', () => { weather = new Weather(scene, LOW_END ? { streaks: 2200, splashes: 120 } : {}); }],
+    ['letting the petals go', () => {
+      petals = createPetals(LOW_END ? 180 : 380);
+      fireflies = createFireflies(LOW_END ? 140 : 260);
       scene.add(petals, fireflies);
     }],
-    ['menyiapkan langkah pertama…', () => {
+    ['finding your feet', () => {
       player = new Player(scene, camera);
       player.splashCallback = (pos, size) => weather && weather.stamp(pos, size);
+      player.stepCallback = (spd) => audio.footstep(spd, weather ? weather.value > 0.3 : false);
+      railway.onChuff = (s) => audio.chuff(s);
+      railway.onWhistle = () => audio.whistle();
     }],
   ];
 
@@ -224,10 +216,10 @@ async function buildWorld() {
   }
   el.bar.style.width = '100%';
   state.built = true;
-  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, wildlife, audio, state, step };
+  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, wildlife, audio, state, step };
 }
 
-/* ───────────────────────── flow ───────────────────────── */
+/* ── flow ── */
 
 async function enterWorld() {
   audio.start().catch(() => {});
@@ -237,15 +229,14 @@ async function enterWorld() {
       await buildWorld();
     } catch (err) {
       console.error(err);
-      el.loadTxt.textContent = 'aduh, dunianya gagal tumbuh — coba muat ulang halaman.';
+      el.loadTxt.textContent = 'something went wrong — please reload the page';
       return;
     }
-    await new Promise((r) => setTimeout(r, 380));
+    await new Promise((r) => setTimeout(r, 350));
   }
 
   el.menuArt.classList.add('gone');
   el.canvas.classList.add('visible');
-  show(null);
   for (const s of screens) $(s).classList.remove('active');
   el.hud.classList.remove('hidden');
   if (input.isTouch) el.touch.classList.remove('hidden');
@@ -256,7 +247,6 @@ async function enterWorld() {
   state.running = true;
   clock.getDelta();
   refreshChips();
-  toast('Selamat datang di Healy');
   audio.resume();
 }
 
@@ -269,7 +259,6 @@ function pauseWorld() {
 }
 
 function resumeWorld() {
-  show(null);
   for (const s of screens) $(s).classList.remove('active');
   state.screen = 'world';
   state.running = true;
@@ -290,39 +279,40 @@ function quitToMenu() {
   if (player) player.reset();
 }
 
-/* ───────────────────────── hud ───────────────────────── */
+/* ── hud ── */
 
 function refreshChips() {
   if (!sky || !weather) return;
-  const [ti, tl] = sky.label();
-  const [wi, wl] = weather.label();
-  $('chip-time').firstChild.textContent = ti + ' ';
-  el.chipTime.textContent = tl;
-  $('chip-weather').firstChild.textContent = wi + ' ';
-  el.chipWeather.textContent = wl;
-  el.chipMusic.textContent = audio.musicOn ? 'Lofi' : 'Sunyi';
+  el.chipTime.textContent = sky.label();
+  el.chipWeather.textContent = weather.label();
+  el.chipMusic.textContent = audio.musicOn ? 'Music on' : 'Music off';
 }
 
 input.on('weather', () => {
   const on = weather.toggle();
-  toast(on ? 'Hujan turun pelan-pelan' : 'Langit mulai cerah');
+  toast(on ? 'Rain drifts in' : 'The sky clears');
   refreshChips();
 });
 
 input.on('time', () => {
   state.timeScale = state.timeScale > 1 ? 1 : 40;
-  toast(state.timeScale > 1 ? 'Waktu dipercepat' : 'Waktu kembali tenang');
+  toast(state.timeScale > 1 ? 'The day hurries on' : 'Time slows back down');
 });
 
 input.on('music', () => {
   const on = audio.toggleMusic();
-  toast(on ? 'Musik kembali' : 'Hening sejenak');
+  toast(on ? 'The music returns' : 'Just the valley now');
   refreshChips();
 });
 
 input.on('sit', () => {
   const sitting = player.toggleSit();
-  toast(sitting ? 'Duduk sebentar…' : 'Berdiri lagi');
+  toast(sitting ? 'Sitting a while' : 'Up again');
+});
+
+input.on('view', () => {
+  const fp = player.toggleView();
+  toast(fp ? 'Through your own eyes' : 'From a few steps back');
 });
 
 input.on('hud', () => {
@@ -330,23 +320,22 @@ input.on('hud', () => {
   el.hud.classList.toggle('faded', !state.hudVisible);
 });
 
-/* ───────────────────────── loop ───────────────────────── */
+/* ── loop ── */
 
 let chipTimer = 0;
 
 function animate() {
   requestAnimationFrame(animate);
-  if (!state.built) return;          // nothing to draw until the world exists
+  if (!state.built) return;
   step(Math.min(0.05, clock.getDelta()), clock.elapsedTime);
 }
 
 function step(dt, t) {
-
   if (state.running) {
     input.sample();
     player.update(dt, t, input);
   } else {
-    input.consumeLook();             // paused: swallow any stray drag
+    input.consumeLook();
   }
 
   const p = player ? player.pos : new THREE.Vector3();
@@ -357,16 +346,10 @@ function step(dt, t) {
   const rain = weather.update(state.running ? dt : dt * 0.25, t, camera);
   sky.applyWeather(rain);
 
-  // wind picks up with the rain
   const wind = 0.45 + rain * 0.85 + Math.sin(t * 0.11) * 0.2;
-  windUniforms.uTime.value = t;
-  windUniforms.uWind.value = wind;
   grass.update(t, camera, sky, wind, rain);
-  painterly.uniforms.uTime.value = t;
-  painterly.uniforms.uWarm.value.copy(sky.sunColor);
-  painterly.uniforms.uCool.value.copy(sky.ambient.color).multiplyScalar(0.85);
-  painterly.uniforms.uSaturation.value = 1.14 - rain * 0.16;
-  painterly.uniforms.uVignette.value = 0.3 + nightFactor * 0.22;
+  forest.update(t, camera, sky, wind, rain);
+  railway.update(dt, t, camera, nightFactor);
 
   // water
   const wu = water.material.uniforms;
@@ -381,14 +364,13 @@ function step(dt, t) {
   wu.uShallow.value.setRGB(0.44, 0.72, 0.69).lerp(sky.fogColor, nightFactor * 0.55);
   wu.uDeep.value.setRGB(0.11, 0.27, 0.31).multiplyScalar(1 - nightFactor * 0.5);
 
-  // lily pads riding the surface
   for (const pad of lilies.children) {
     if (pad.userData.bob === undefined) continue;
     pad.position.y = WATER_LEVEL + 0.03 + Math.sin(t * 1.3 + pad.userData.bob) * 0.045 * (1 + rain);
     pad.rotation.z += 0.04 * dt;
   }
 
-  // warm windows and lantern flames after dusk
+  // lamps after dusk
   const lampK = clamp(nightFactor * 1.2, 0, 1);
   for (const g of cottage.userData.glows) g.material.opacity = lampK * 0.95;
   cottage.userData.lamp.intensity = lampK * 1.5;
@@ -400,13 +382,14 @@ function step(dt, t) {
   updateFireflies(fireflies, dt, t, nightFactor * (1 - rain * 0.6));
   wildlife.update(dt, t, p, nightFactor);
 
-  bloom.strength = 0.16 + nightFactor * 0.38 + rain * 0.05;
+  bloom.strength = 0.22 + nightFactor * 0.3 + rain * 0.04;
+  updatePrintPass(print, camera, sky, t, nightFactor, rain);
 
   audio.update(dt, {
     rain,
     night: nightFactor,
     wind: clamp(wind * 0.6, 0, 1),
-    moving: player ? player.speed / 6.6 : 0,
+    train: railway ? { active: railway.active, dist: railway.dist, pan: railway.pan } : null,
   });
 
   chipTimer -= dt;
@@ -426,19 +409,18 @@ function governQuality(dt) {
   const avg = quality.sum / quality.frames;
   quality.frames = 0;
   quality.sum = 0;
-  if (avg > 0.028 && quality.ss > 0.62) {          // slower than ~36fps
+  if (avg > 0.028 && quality.ss > 0.55) {
     quality.steps++;
     quality.ss *= 0.78;
     renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, 2));
     onResize();
   } else if (avg < 0.014) {
-    quality.steps = 2;                              // comfortably fast, stop measuring
+    quality.steps = 2;
   }
 }
 
 requestAnimationFrame(animate);
 
-/* keep the tab quiet when it is not being looked at */
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) audio.stop();
   else audio.resume();

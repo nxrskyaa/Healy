@@ -467,7 +467,7 @@ export function createMushrooms(count = 70) {
     if (h < WATER_LEVEL + 0.5) continue;
     if (normalAt(x, z, 1.0).y < 0.8) continue;
 
-    const sc = 0.7 + rnd() * 1.1;
+    const sc = 0.45 + rnd() * 0.55;
     d.position.set(x, h + 0.3 * sc, z);
     d.rotation.set(0, rnd() * 3, 0);
     d.scale.setScalar(sc);

@@ -123,7 +123,7 @@ export function createOuterGround() {
     groundColor(x, z, h, 1 - n.y, c);
     // the far ground is seen through more air — let it drift toward the hills
     const k = smoothstep(150, 520, Math.hypot(x, z));
-    c.lerp(new THREE.Color('#8ba394'), k * 0.45);
+    c.lerp(new THREE.Color('#749072'), k * 0.3);
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
@@ -220,13 +220,13 @@ export function createStones(count = 130) {
     const h = heightAt(x, z);
     if (h < WATER_LEVEL - 0.8) continue;
 
-    const s = 0.35 + rnd() * 1.5;
+    const s = 0.3 + rnd() * 0.9;
     dummy.position.set(x, h - s * 0.35, z);
     dummy.rotation.set(rnd() * 3, rnd() * 3, rnd() * 3);
     dummy.scale.set(s * (0.8 + rnd() * 0.5), s * (0.6 + rnd() * 0.4), s * (0.8 + rnd() * 0.5));
     dummy.updateMatrix();
     mesh.setMatrixAt(placed, dummy.matrix);
-    c.setHSL(0.24, 0.06, 0.42 + rnd() * 0.22);
+    c.setHSL(0.13, 0.1, 0.55 + rnd() * 0.18);
     colors[placed * 3] = c.r; colors[placed * 3 + 1] = c.g; colors[placed * 3 + 2] = c.b;
     placed++;
   }
