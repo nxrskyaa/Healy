@@ -43,6 +43,7 @@
 
     <nav class="menu-nav">
       <button class="mbtn primary" data-action="start">Enter the world</button>
+      <button class="mbtn" data-action="creator">Make a character</button>
       <button class="mbtn" data-action="controls">Controls</button>
       <button class="mbtn" data-action="about">About</button>
     </nav>
@@ -65,6 +66,7 @@
       <div class="krow"><span class="keys"><kbd class="wide">Drag</kbd></span><span>Look around</span></div>
       <div class="krow"><span class="keys"><kbd class="wide">Scroll</kbd></span><span>Zoom</span></div>
       <div class="krow"><span class="keys"><kbd>V</kbd></span><span>First person</span></div>
+      <div class="krow"><span class="keys"><kbd>C</kbd></span><span>Change your character</span></div>
       <div class="krow"><span class="keys"><kbd>E</kbd></span><span>Sit down</span></div>
       <div class="krow"><span class="keys"><kbd>R</kbd></span><span>Rain on / off</span></div>
       <div class="krow"><span class="keys"><kbd>T</kbd></span><span>Hurry the day along</span></div>
@@ -115,6 +117,32 @@
   </div>
 </div>
 
+<!-- ── character creator ── -->
+<div id="creator" class="screen">
+  <div class="creator-shell">
+    <div class="creator-stage">
+      <canvas id="creator-canvas"></canvas>
+      <div class="stage-hint">drag to turn</div>
+    </div>
+
+    <div class="creator-side">
+      <header class="creator-head">
+        <h2>Make a character</h2>
+        <p>They'll be waiting in the meadow.</p>
+      </header>
+
+      <div class="creator-list" id="creator-list"></div>
+
+      <footer class="creator-foot">
+        <button class="mbtn ghost" data-action="randomize">Surprise me</button>
+        <button class="mbtn primary" data-action="creator-done">Begin</button>
+      </footer>
+    </div>
+
+    <button class="close creator-close" data-action="back" aria-label="Back">&times;</button>
+  </div>
+</div>
+
 <!-- ── loading ── -->
 <div id="loading" class="screen">
   <div class="load-inner">
@@ -150,6 +178,7 @@
     <p class="panel-sub">The valley will wait.</p>
     <div class="pause-btns">
       <button class="mbtn primary" data-action="resume">Keep walking</button>
+      <button class="mbtn" data-action="creator">Change character</button>
       <button class="mbtn" data-action="controls">Controls</button>
       <button class="mbtn" data-action="about">About</button>
       <button class="mbtn" data-action="quit">Main menu</button>

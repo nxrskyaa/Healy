@@ -21,6 +21,7 @@ LuminosityHighPassShader.fragmentShader = LuminosityHighPassShader.fragmentShade
 );
 
 import { startMenuArt } from './menuart.js';
+import { Creator, loadAvatarConfig } from './creator.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio/lofi.js';
 import { Sky } from './world/sky.js';
@@ -47,7 +48,7 @@ import {
    ═══════════════════════════════════════════════════════════ */
 
 const $ = (id) => document.getElementById(id);
-const screens = ['menu', 'controls', 'about', 'loading', 'pause'];
+const screens = ['menu', 'controls', 'about', 'creator', 'loading', 'pause'];
 
 const el = {
   canvas: $('scene'),
@@ -82,6 +83,9 @@ const audio = new AudioEngine();
 const input = new Input(el.canvas);
 startMenuArt($('menu-canvas'));
 
+let avatarConfig = loadAvatarConfig();
+let creator = null;
+
 /* ── screens ── */
 
 function show(name) {
@@ -102,20 +106,54 @@ function toast(msg, ms = 2100) {
   toast._t = setTimeout(() => el.toast.classList.remove('show'), ms);
 }
 
+/* ── the creator ── */
+
+function openCreator() {
+  state.returnTo = (state.screen === 'pause' || state.screen === 'menu') ? state.screen : 'menu';
+  input.enabled = false;
+  if (!creator) {
+    creator = new Creator({
+      canvas: $('creator-canvas'),
+      list: $('creator-list'),
+      onDone: (cfg) => {
+        avatarConfig = cfg;
+        if (player) player.setAvatar(cfg);
+        creator.stop();
+        if (state.returnTo === 'pause' && state.built) resumeWorld();
+        else enterWorld();
+      },
+    });
+  }
+  show('creator');
+  creator.start();
+  window.__creator = creator;
+}
+
+function closeCreator() {
+  if (creator) creator.stop();
+  avatarConfig = creator ? creator.config : avatarConfig;
+  if (player) player.setAvatar(avatarConfig);
+  show(state.returnTo);
+}
+
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
   const action = btn.dataset.action;
   if (action === 'start') enterWorld();
+  else if (action === 'creator') openCreator();
+  else if (action === 'creator-done') creator.done();
+  else if (action === 'randomize') creator.randomize();
   else if (action === 'controls') openPanel('controls');
   else if (action === 'about') openPanel('about');
-  else if (action === 'back') show(state.returnTo);
+  else if (action === 'back') { if (state.screen === 'creator') closeCreator(); else show(state.returnTo); }
   else if (action === 'resume') resumeWorld();
   else if (action === 'quit') quitToMenu();
 });
 
 input.on('escape', () => {
-  if (state.screen === 'controls' || state.screen === 'about') show(state.returnTo);
+  if (state.screen === 'creator') closeCreator();
+  else if (state.screen === 'controls' || state.screen === 'about') show(state.returnTo);
   else if (state.screen === 'pause') resumeWorld();
   else if (state.screen === null || state.screen === 'world') pauseWorld();
 });
@@ -233,7 +271,7 @@ async function buildWorld() {
       scene.add(petals, fireflies);
     }],
     ['finding your feet', () => {
-      player = new Player(scene, camera);
+      player = new Player(scene, camera, avatarConfig);
       player.splashCallback = (pos, size) => weather && weather.stamp(pos, size);
       player.stepCallback = (spd) => audio.footstep(spd, weather ? weather.value > 0.3 : false);
       railway.onChuff = (s) => audio.chuff(s);
@@ -347,6 +385,13 @@ input.on('sit', () => {
 input.on('view', () => {
   const fp = player.toggleView();
   toast(fp ? 'Through your own eyes' : 'From a few steps back');
+});
+
+input.on('character', () => {
+  state.running = false;
+  input.enabled = false;
+  state.returnTo = 'pause';
+  openCreator();
 });
 
 input.on('hud', () => {

@@ -48,25 +48,25 @@ function eyes(parts, x, y, z, r = 0.055) {
 /* ───────────────────────── species geometry ───────────────────────── */
 
 const BUILDERS = {
-  soot() {
+  /* A duckling. The spiky black soot sprites read as burrs rolling through
+     the grass, which is not the note this meadow is playing. */
+  duckling() {
     const p = [];
-    const body = S(0.3, 1);
-    body.scale(1, 0.95, 1);
-    p.push(paint(body, '#1d1a20', 0.08));
-    // fuzzy spikes
-    const rnd = makeRandom(7);
-    for (let i = 0; i < 22; i++) {
-      const a = rnd() * Math.PI * 2, b = Math.acos(2 * rnd() - 1);
-      const x = Math.sin(b) * Math.cos(a), y = Math.cos(b), z = Math.sin(b) * Math.sin(a);
-      const g = new THREE.ConeGeometry(0.045, 0.17, 4);
-      g.rotateX(Math.PI / 2);                       // tip now points along +Z
-      const m = new THREE.Matrix4().lookAt(new THREE.Vector3(x, y, z), new THREE.Vector3(), new THREE.Vector3(0, 1, 0));
-      g.applyMatrix4(m);
-      g.translate(x * 0.3, y * 0.3, z * 0.3);
-      p.push(paint(g, '#15121a', 0.05));
-    }
-    eyes(p, 0.1, 0.06, 0.27, 0.07);
-    return { geo: mergeParts(p), lift: 0.3, scale: 1 };
+    p.push(paint(ell(0.19, 1.05, 0.95, 1.25, 0, 0.19, 0), '#f0dc9a', 0.04));
+    p.push(paint(ell(0.125, 1, 1, 1, 0, 0.36, 0.11), '#f6e6ae', 0.03));
+    // bill and feet in the same soft orange
+    const bill = new THREE.SphereGeometry(0.055, 8, 6);
+    bill.scale(1.05, 0.45, 1.2);
+    bill.translate(0, 0.335, 0.22);
+    p.push(paint(bill, '#e2a24c', 0.02));
+    p.push(paint(ell(0.075, 1.3, 0.28, 1.0, -0.075, 0.03, 0.03), '#e2a24c', 0.03));
+    p.push(paint(ell(0.075, 1.3, 0.28, 1.0, 0.075, 0.03, 0.03), '#e2a24c', 0.03));
+    // stubby wings
+    for (const s of [-1, 1]) p.push(paint(ell(0.09, 0.35, 0.8, 1.1, s * 0.17, 0.2, 0), '#e8d288', 0.03));
+    // tail tuft
+    p.push(paint(cone(0.06, 0.11, 0, 0.24, -0.2, -Math.PI / 2, 0), '#e8d288', 0.03));
+    eyes(p, 0.055, 0.39, 0.2, 0.028);
+    return { geo: mergeParts(p), lift: 0.0, scale: 1 };
   },
 
   cat() {
@@ -333,11 +333,11 @@ export class Wildlife {
   }
 
   _spawnLand() {
-    // soot sprites keep to the shadow of the great tree
-    for (let i = 0; i < 12; i++) {
-      this._addWalker('soot', -26, 20, 13, {
-        speed: 1.1, hop: 9, roam: 9, shy: 3.2, scale: 0.85 + this.rnd() * 0.5,
-        idleMin: 0.4, idleMax: 1.8,
+    // a brood of ducklings pottering near the pond's bank
+    for (let i = 0; i < 9; i++) {
+      this._addWalker('duckling', POND.x - 24, POND.z + 12, 14, {
+        speed: 1.0, hop: 7, roam: 11, shy: 3.0, scale: 0.8 + this.rnd() * 0.35,
+        idleMin: 0.6, idleMax: 2.4,
       });
     }
     for (let i = 0; i < 4; i++) {

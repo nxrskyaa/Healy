@@ -1,167 +1,22 @@
 import * as THREE from 'three';
 import { heightAt, POND, WATER_LEVEL, WORLD_SIZE } from './terrain.js';
 import { clamp, damp } from './noise.js';
+import { buildAvatar } from './avatar.js';
 
 /* ═══════════════════════════════════════════════════════════
-   The wanderer: a round little islander with a frangipani in
-   her hair, plus the third-person camera that trails politely
-   behind — or her own eyes, if you press V.
+   The wanderer, and the third-person camera that trails
+   politely behind — or her own eyes, if you press V.
+   The figure itself is built by avatar.js from whatever the
+   creator screen was left on.
    ═══════════════════════════════════════════════════════════ */
-
-const L = (color) => new THREE.MeshLambertMaterial({ color });
-
-const SKIN   = L('#e3b68c');
-const HAIR   = L('#241d19');
-const TOP    = L('#f2ead8');       // white kebaya
-const SARONG = L('#8c4436');       // terracotta wrap
-const SASH   = L('#c9992e');       // gold waist sash
-const PETAL  = L('#f6f1e2');
-const PISTIL = L('#e4b33c');
-
-export function createCharacter() {
-  const root = new THREE.Group();
-  root.name = 'player';
-
-  /* A round little islander. The whole figure is three readable shapes —
-     head, white top, terracotta sarong — with everything else kept to
-     accents. Chibi proportions: the head is nearly a third of the height,
-     which is what makes a figure at eight metres read as a character
-     instead of a mannequin. */
-
-  const hips = new THREE.Group();
-  hips.position.y = 0.5;
-  root.add(hips);
-
-  // sarong: one smooth wrap from waist to ankle, gold band at the waist
-  const prof = [];
-  for (const [x, y] of [
-    [0.20, 0.16], [0.225, 0.06], [0.235, -0.10], [0.235, -0.26],
-    [0.225, -0.38], [0.205, -0.45], [0.14, -0.47], [0.02, -0.475],
-  ]) prof.push(new THREE.Vector2(x, y));
-  const cloak = new THREE.Mesh(new THREE.LatheGeometry(prof, 18), SARONG);
-  cloak.castShadow = true;
-  hips.add(cloak);
-
-  const sashBand = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.225, 0.09, 16), SASH);
-  sashBand.position.y = 0.17;
-  hips.add(sashBand);
-  // sash tail — the animator flutters this while running
-  const sashTail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.26, 0.02), SASH);
-  sashTail.position.set(0.05, 0.02, -0.22);
-  sashTail.rotation.x = 0.14;
-  hips.add(sashTail);
-
-  // white top: a soft rounded torso
-  const torso = new THREE.Mesh(new THREE.SphereGeometry(0.21, 16, 12), TOP);
-  torso.scale.set(1, 1.15, 0.9);
-  torso.position.y = 0.34;
-  torso.castShadow = true;
-  hips.add(torso);
-
-  // head: big, round, simple
-  const neck = new THREE.Group();
-  neck.position.y = 0.62;
-  hips.add(neck);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 20, 16), SKIN);
-  head.scale.set(1, 0.98, 0.98);
-  head.position.y = 0.16;
-  head.castShadow = true;
-  neck.add(head);
-
-  // bob haircut: the fringe stops above the eyes — a face that is all hair
-  // is no face at all
-  const hairCap = new THREE.Mesh(
-    new THREE.SphereGeometry(0.285, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.5), HAIR);
-  hairCap.position.y = 0.17;
-  hairCap.rotation.x = 0.1;
-  neck.add(hairCap);
-  // the back and sides fall lower than the fringe
-  const hairBack = new THREE.Mesh(
-    new THREE.SphereGeometry(0.282, 18, 12, Math.PI * 0.7, Math.PI * 1.6, 0, Math.PI * 0.68), HAIR);
-  hairBack.position.set(0, 0.17, -0.01);
-  neck.add(hairBack);
-
-  // small bun, high on the back — doubles as the "hat" for the idle wobble
-  const hat = new THREE.Group();
-  const bun = new THREE.Mesh(new THREE.SphereGeometry(0.095, 12, 10), HAIR);
-  bun.scale.set(1, 0.85, 1);
-  const bunTie = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 6, 14), SASH);
-  bunTie.rotation.x = Math.PI / 2;
-  bunTie.position.y = -0.055;
-  hat.add(bun, bunTie);
-  hat.position.set(0, 0.4, -0.13);
-  neck.add(hat);
-
-  // frangipani tucked over the right ear
-  const flower = new THREE.Group();
-  for (let i = 0; i < 5; i++) {
-    const petal = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), PETAL);
-    petal.scale.set(1, 0.45, 0.62);
-    const a = (i / 5) * Math.PI * 2;
-    petal.position.set(Math.cos(a) * 0.038, 0, Math.sin(a) * 0.038);
-    petal.rotation.y = -a;
-    flower.add(petal);
-  }
-  const pistil = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), PISTIL);
-  flower.add(pistil);
-  flower.scale.setScalar(0.72);
-  flower.position.set(0.225, 0.3, 0.055);
-  flower.rotation.set(0.4, 0.3, -1.15);
-  neck.add(flower);
-
-  // face: two dark eyes and warm cheeks, nothing else
-  for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.022, 0.024, 2, 6), HAIR);
-    eye.position.set(0.095 * s, 0.1, 0.245);
-    neck.add(eye);
-  }
-
-  // stubby arms, bare with a short white sleeve
-  const mkArm = () => {
-    const g = new THREE.Group();
-    const sleeve = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), TOP);
-    sleeve.scale.set(1, 1.2, 1);
-    sleeve.position.y = -0.03;
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.14, 3, 8), SKIN);
-    arm.position.y = -0.16;
-    arm.castShadow = true;
-    g.add(sleeve, arm);
-    return g;
-  };
-  const shoulderL = new THREE.Group(); shoulderL.position.set(-0.21, 0.44, 0);
-  const shoulderR = new THREE.Group(); shoulderR.position.set(0.21, 0.44, 0);
-  shoulderL.add(mkArm());
-  shoulderR.add(mkArm());
-  shoulderL.rotation.z = 0.3;
-  shoulderR.rotation.z = -0.3;
-  hips.add(shoulderL, shoulderR);
-
-  // tiny feet peeking from under the hem
-  const mkFoot = () => {
-    const f = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.07, 3, 8), SKIN);
-    f.rotation.x = Math.PI / 2;
-    f.position.set(0, -0.485, 0.05);
-    f.castShadow = true;
-    return f;
-  };
-  const hipL = new THREE.Group(); hipL.position.set(-0.09, 0, 0);
-  const hipR = new THREE.Group(); hipR.position.set(0.09, 0, 0);
-  hipL.add(mkFoot());
-  hipR.add(mkFoot());
-  hips.add(hipL, hipR);
-
-  root.userData = { hips, neck, hat, shoulderL, shoulderR, hipL, hipR, cloak, scarfTail: sashTail, baseHipY: 0.5 };
-  return root;
-}
-
-/* ───────────────────────── controller ───────────────────────── */
 
 const HALF = WORLD_SIZE / 2 - 12;
 
 export class Player {
-  constructor(scene, camera) {
-    this.mesh = createCharacter();
+  constructor(scene, camera, avatarConfig) {
+    this.scene = scene;
+    this.avatarConfig = avatarConfig;
+    this.mesh = buildAvatar(avatarConfig);
     scene.add(this.mesh);
     this.camera = camera;
 
@@ -193,6 +48,16 @@ export class Player {
     this.mesh.visible = !this.firstPerson;
     if (!this.firstPerson) this._first = true;   // snap the chase camera back
     return this.firstPerson;
+  }
+
+  /** Swap the figure without disturbing where she is standing. */
+  setAvatar(config) {
+    this.avatarConfig = config;
+    this.scene.remove(this.mesh);
+    this.mesh.userData.dispose?.();
+    this.mesh = buildAvatar(config);
+    this.mesh.visible = !this.firstPerson;
+    this.scene.add(this.mesh);
   }
 
   reset() {
@@ -318,7 +183,10 @@ export class Player {
     u.neck.rotation.x = -run * 0.1 + Math.sin(t * 1.4) * 0.02 + sit * 0.1;
     u.neck.rotation.z = Math.sin(t * 0.9) * 0.03;
     u.hat.rotation.z = Math.sin(t * 2.2) * 0.02 + run * 0.03;
-    u.scarfTail.rotation.x = 0.5 + run * 0.6 + Math.sin(t * 6) * 0.15 * run;
+    // hair swings from the head, lagging the stride and lifting as she runs
+    u.scarfTail.rotation.x = -run * 0.3 - Math.sin(this.stride * 2 - 0.8) * 0.12 * run
+      - Math.sin(t * 1.3) * 0.02;
+    u.scarfTail.rotation.z = Math.sin(this.stride - 0.5) * 0.1 * run;
     u.cloak.rotation.x = run * 0.06;
     // the hem swings a beat behind the stride
     u.cloak.rotation.z = Math.sin(this.stride - 0.6) * 0.05 * run;

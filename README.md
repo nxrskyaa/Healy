@@ -25,6 +25,7 @@ functions and Web Audio oscillators.
 | drag mouse | look around |
 | scroll | zoom |
 | `V` | first person |
+| `C` | change your character |
 | `E` | sit down |
 | `R` | toggle rain |
 | `T` | fast-forward the day |
@@ -65,6 +66,14 @@ blade, a backlight rim along the bent-over tips, and drifting cloud shadows.
 
 ## Everything else
 
+- `js/world/avatar.js` — the parametric character. The face is drawn into a
+  512² canvas (irises with a gradient ramp, heavy upper lash line, two
+  highlights) and wrapped onto the front of a chinned ovoid skull as an
+  alpha-tested decal — that one texture carries the whole read. Hair is
+  built from tapered shards and swept tubes; nine styles, six outfits, and
+  around a hundred thousand combinations in total.
+- `js/creator.js` — the character creator: its own small renderer, so you can
+  make someone before the world is paid for
 - `js/world/bali.js` — the temple set: candi bentar split gate, five-tiered
   meru, bale pavilion, penjor poles, lantern strings
 - `js/world/trees.js` — trunks swept along curves, canopies built from
