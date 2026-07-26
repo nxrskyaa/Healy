@@ -171,16 +171,21 @@ function buildTrack() {
 
 /* ───────────── the train itself ───────────── */
 
+/* A locomotive is the one thing in this valley that is genuinely made of
+   metal, and metal is exactly what Lambert cannot do: no specular, no
+   environment, so a boiler came out looking like painted card. With the sky
+   prefiltered into an environment map, giving these real metalness and
+   roughness is most of what makes the train read as machinery. */
 const M = {
-  boiler: new THREE.MeshLambertMaterial({ color: '#2b333c' }),
-  boilerLit: new THREE.MeshLambertMaterial({ color: '#3d4650' }),
-  livery: new THREE.MeshLambertMaterial({ color: '#7e3a34' }),
-  brass: new THREE.MeshLambertMaterial({ color: '#a8894a' }),
-  wheel: new THREE.MeshLambertMaterial({ color: '#1d2126' }),
-  carBody: new THREE.MeshLambertMaterial({ color: '#3c6152' }),
-  carBand: new THREE.MeshLambertMaterial({ color: '#d8cdb2' }),
-  carWin: new THREE.MeshBasicMaterial({ color: '#ffe9b2' }),
-  roof: new THREE.MeshLambertMaterial({ color: '#2e3238' }),
+  boiler:    new THREE.MeshStandardMaterial({ color: '#2b333c', metalness: 0.85, roughness: 0.42 }),
+  boilerLit: new THREE.MeshStandardMaterial({ color: '#3d4650', metalness: 0.8,  roughness: 0.34 }),
+  livery:    new THREE.MeshStandardMaterial({ color: '#7e3a34', metalness: 0.25, roughness: 0.55 }),
+  brass:     new THREE.MeshStandardMaterial({ color: '#a8894a', metalness: 1.0,  roughness: 0.28 }),
+  wheel:     new THREE.MeshStandardMaterial({ color: '#1d2126', metalness: 0.9,  roughness: 0.5 }),
+  carBody:   new THREE.MeshStandardMaterial({ color: '#3c6152', metalness: 0.2,  roughness: 0.62 }),
+  carBand:   new THREE.MeshStandardMaterial({ color: '#d8cdb2', metalness: 0.15, roughness: 0.7 }),
+  carWin:    new THREE.MeshBasicMaterial({ color: '#ffe9b2' }),
+  roof:      new THREE.MeshStandardMaterial({ color: '#2e3238', metalness: 0.6,  roughness: 0.66 }),
 };
 
 function buildLoco() {

@@ -92,7 +92,7 @@ export function createGround() {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';
@@ -129,8 +129,9 @@ export function createOuterGround() {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
 
-  const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true }));
   mesh.name = 'outerGround';
+  mesh.receiveShadow = true;
   mesh.renderOrder = -1;
   return mesh;
 }
@@ -148,13 +149,13 @@ export function createFlowers(count = 2600) {
   const palette = ['#f6f2e2', '#f3c9d8', '#f7d97a', '#c9b6ea', '#ffb4a2'];
   const perColor = Math.floor(count / palette.length);
 
-  const stemMat = new THREE.MeshLambertMaterial({ color: '#5c8450' });
+  const stemMat = new THREE.MeshStandardMaterial({ color: '#5c8450' });
   const stems = new THREE.InstancedMesh(stem, stemMat, count);
   const rnd = makeRandom(909);
   const dummy = new THREE.Object3D();
 
   const heads = palette.map((hex) => {
-    const m = new THREE.MeshLambertMaterial({ color: hex, side: THREE.DoubleSide, emissive: new THREE.Color(hex).multiplyScalar(0.12) });
+    const m = new THREE.MeshStandardMaterial({ color: hex, side: THREE.DoubleSide, emissive: new THREE.Color(hex).multiplyScalar(0.12) });
     const im = new THREE.InstancedMesh(petal, m, perColor);
     im.frustumCulled = false;
     return im;
@@ -201,7 +202,7 @@ export function createFlowers(count = 2600) {
 
 export function createStones(count = 130) {
   const geo = new THREE.DodecahedronGeometry(1, 0);
-  const mat = new THREE.MeshLambertMaterial({ color: '#8d9188', flatShading: true, vertexColors: true });
+  const mat = new THREE.MeshStandardMaterial({ color: '#8d9188', flatShading: true, vertexColors: true });
   const mesh = new THREE.InstancedMesh(geo, mat, count);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -346,9 +347,9 @@ export function createLilyPads(count = 34) {
   group.name = 'lilies';
   const padGeo = new THREE.CircleGeometry(0.62, 12);
   // notch the pad so it reads as a lily leaf from above
-  const padMat = new THREE.MeshLambertMaterial({ color: '#5d9457', side: THREE.DoubleSide });
+  const padMat = new THREE.MeshStandardMaterial({ color: '#5d9457', side: THREE.DoubleSide });
   const flowerGeo = new THREE.SphereGeometry(0.16, 8, 6);
-  const flowerMat = new THREE.MeshLambertMaterial({ color: '#f7e2ec', emissive: '#3a1f2a' });
+  const flowerMat = new THREE.MeshStandardMaterial({ color: '#f7e2ec', emissive: '#3a1f2a' });
 
   const rnd = makeRandom(31415);
   for (let i = 0; i < count; i++) {

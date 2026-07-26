@@ -33,6 +33,7 @@ import { GrassField } from './world/grass.js';
 import { Forest } from './world/trees.js';
 import { Railway } from './world/train.js';
 import { createPrintPass, updatePrintPass } from './world/grade.js';
+import { SkyEnvironment } from './world/env.js';
 import {
   createGround, createOuterGround, createFlowers, createStones,
   createWater, createLilyPads, WATER_LEVEL,
@@ -162,7 +163,7 @@ input.on('escape', () => {
 
 let renderer, scene, camera, composer, bloom, print, fxaa;
 let sky, weather, wildlife, player, water, petals, fireflies, lilies;
-let bali, grass, forest, railway;
+let bali, grass, forest, railway, scatter, skyEnv;
 const clock = new THREE.Clock();
 let nightFactor = 0;
 
@@ -243,7 +244,11 @@ const yieldToUI = () => new Promise((r) => setTimeout(r, 16));
 async function buildWorld() {
   const steps = [
     ['preparing the canvas', () => initRenderer()],
-    ['painting the sky', () => { sky = new Sky(scene); }],
+    ['painting the sky', () => {
+      sky = new Sky(scene);
+      // every MeshStandardMaterial in the world reflects this
+      skyEnv = new SkyEnvironment(renderer, scene, sky);
+    }],
     ['shaping the hills', () => { scene.add(createGround(), createOuterGround()); }],
     ['growing the meadow', () => {
       grass = new GrassField(scene, LOW_END
@@ -286,6 +291,10 @@ async function buildWorld() {
     await yieldToUI();
     fn();
   }
+  // Standard materials reflect the sky at full strength by default, which on
+  // a bright overcast dome bleaches the palette. One pass, once.
+  SkyEnvironment.applyIntensity(scene, 0.5);
+
   el.bar.style.width = '100%';
   state.built = true;
   window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, bali, wildlife, audio, state, step };
@@ -429,6 +438,8 @@ function step(dt, t) {
   grass.update(t, camera, sky, wind, rain);
   forest.update(t, camera, sky, wind, rain);
   railway.update(dt, t, camera, nightFactor);
+  if (scatter) scatter.update(dt, t, camera, sky, nightFactor);
+  skyEnv.update(rain);
 
   // water
   const wu = water.material.uniforms;

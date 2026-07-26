@@ -377,16 +377,57 @@ uniform float uFogDensity;
 uniform vec3  uCamPos;
 uniform vec3  uTransCol;
 
+uniform sampler2D uShadowMap;
+uniform mat4  uShadowMat;
+uniform vec2  uShadowTexel;
+uniform float uShadowOn;
+
+/* Three packs shadow depth into RGBA rather than using a depth texture, so
+   reading its shadow map by hand means unpacking it the same way its own
+   shaders do. Getting this wrong is silent: you just get a meadow that is
+   uniformly lit, which is exactly what it was before. */
+float unpackRGBAToDepth(vec4 v) {
+  const vec4 F = vec4(255.0 / 256.0) / vec4(16777216.0, 65536.0, 256.0, 1.0);
+  return dot(v, F);
+}
+
+/* The grass does not CAST into the shadow map — a million blades in the depth
+   pass would cost more than the whole rest of the frame — but it very much
+   needs to RECEIVE. Without this, trees and buildings float on an evenly lit
+   lawn and nothing in the valley feels like it is standing on the ground. */
+float sunShadow(vec3 wp, vec3 n) {
+  if (uShadowOn < 0.5) return 1.0;
+  vec4 sc = uShadowMat * vec4(wp + n * 0.05, 1.0);
+  sc.xyz /= sc.w;
+  if (sc.z > 1.0) return 1.0;
+  vec2 e = abs(sc.xy - 0.5);
+  float edge = max(e.x, e.y);
+  if (edge > 0.5) return 1.0;
+
+  float z = sc.z - 0.0018;
+  vec2 ts = uShadowTexel;
+  float s =
+      step(z, unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2( ts.x,  ts.y))))
+    + step(z, unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2(-ts.x,  ts.y))))
+    + step(z, unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2( ts.x, -ts.y))))
+    + step(z, unpackRGBAToDepth(texture2D(uShadowMap, sc.xy + vec2(-ts.x, -ts.y))));
+  // dissolve the boundary of the shadow camera instead of ending it in a line
+  return mix(1.0, s * 0.25, 1.0 - smoothstep(0.4, 0.5, edge));
+}
+
 void main() {
   vec3 N = normalize(vNormal);
   vec3 V = normalize(uCamPos - vWorld);
   // a blade is a sheet: whichever face we see, it faces us
   if (dot(N, V) < 0.0) N = -N;
 
+  // cloud shadow and cast shadow are the same currency to everything below
+  float lit = vShadow * mix(0.42, 1.0, sunShadow(vWorld, N));
+
   float ndl = dot(N, uSunDir);
   // Half-lambert. A low sun grazes upright grass; plain Lambert would drop the
   // whole meadow into shade and golden hour would read as dusk.
-  float wrap = clamp(ndl * 0.6 + 0.46, 0.0, 1.0) * mix(0.62, 1.0, vShadow);
+  float wrap = clamp(ndl * 0.6 + 0.46, 0.0, 1.0) * mix(0.62, 1.0, lit);
 
   vec3 col = vColor * (uSunColor * wrap + mix(uAmbGround, uAmbSky, N.y * 0.5 + 0.5) * uAmbIntensity * 0.45);
 
@@ -394,11 +435,11 @@ void main() {
   // the blade is edge-on to the sun and we are looking into it
   float toward = pow(clamp(dot(V, -uSunDir), 0.0, 1.0), 3.0);
   float thin = pow(clamp(1.0 - abs(ndl), 0.0, 1.0), 2.0);
-  col += uTransCol * uSunColor * toward * thin * vT * 0.55 * vShadow;
+  col += uTransCol * uSunColor * toward * thin * vT * 0.55 * lit;
 
   // backlight rim along the bent-over tips — the connective tissue of the image
   float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 4.0);
-  col += uSunColor * fres * toward * (0.25 + vBend * 0.5) * 0.5 * vShadow;
+  col += uSunColor * fres * toward * (0.25 + vBend * 0.5) * 0.5 * lit;
 
   // sky bounce on the tips
   col += uAmbSky * vColor * vT * vT * 0.2 * uAmbIntensity;
@@ -423,6 +464,11 @@ const RINGS = [
   { radius:  72, count: 420000, segments: 3, dn: 30, hs: 1.15, wpx: 2.7 }, //  20/m²
   { radius: 160, count: 340000, segments: 2, dn: 70, hs: 1.50, wpx: 4.4 }, // 3.3/m²
 ];
+
+/* A sampler uniform must point at something real from the first compile —
+   the shadow map does not exist until the renderer has drawn one frame. */
+const WHITE_1PX = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+WHITE_1PX.needsUpdate = true;
 
 const LOW_RINGS = [
   { radius:  18, count:  70000, segments: 3, dn:  7, hs: 1.00, wpx: 2.2 },
@@ -495,6 +541,10 @@ export class GrassField {
           uFogDensity: { value: 0.007 },
           uCamPos: { value: new THREE.Vector3() },
           uTransCol: { value: new THREE.Color('#c9de6e') },
+          uShadowMap: { value: WHITE_1PX },
+          uShadowMat: { value: new THREE.Matrix4() },
+          uShadowTexel: { value: new THREE.Vector2(1 / 2048, 1 / 2048) },
+          uShadowOn: { value: 0 },
           uCloudDrift: { value: this.cloudDrift },
           uCloudAmount: { value: 0.75 },
         },
@@ -554,6 +604,17 @@ export class GrassField {
       u.uFogDensity.value = sky.scene.fog.density;
       u.uCull.value.set(fx / flat, fz / flat, cosCone);
       u.uCloudAmount.value = 0.55 + rain * 0.4;
+
+      // the sun's shadow map, borrowed from the light three already renders
+      const sh = sky.sun.shadow;
+      if (sh && sh.map && sh.map.texture) {
+        u.uShadowMap.value = sh.map.texture;
+        u.uShadowMat.value.copy(sh.matrix);
+        u.uShadowTexel.value.set(1 / sh.mapSize.x, 1 / sh.mapSize.y);
+        u.uShadowOn.value = sky.sunUp > 0.03 ? 1 : 0;
+      } else {
+        u.uShadowOn.value = 0;
+      }
       u.uTransCol.value.setRGB(0.79, 0.87, 0.43).multiplyScalar(1 - rain * 0.4);
     }
   }

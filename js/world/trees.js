@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { makeRandom, clamp } from './noise.js';
 import { heightAt, normalAt, POND, WATER_LEVEL } from './terrain.js';
+import { enableInstancedShadows } from './env.js';
 
 /* ═══════════════════════════════════════════════════════════
    Trees. Trunks are tapered tubes swept along a curve;
@@ -406,6 +407,10 @@ export class Forest {
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.frustumCulled = false;
+      // the trees hold their transform in an instance attribute, so the depth
+      // pass has to run their own vertex shader or every shadow lands at the
+      // world origin
+      enableInstancedShadows(mesh, vert, mat.uniforms);
       scene.add(mesh);
       this.materials.push(mat);
     }
@@ -425,6 +430,7 @@ export class Forest {
     gm.uniforms.uTreeH.value = great.userData.height;
     const gMesh = new THREE.Mesh(great, gm);
     gMesh.frustumCulled = false;
+    enableInstancedShadows(gMesh, vert, gm.uniforms);
     scene.add(gMesh);
     this.materials.push(gm);
   }

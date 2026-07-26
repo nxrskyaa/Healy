@@ -15,17 +15,21 @@ import { heightAt, POND } from './terrain.js';
 
 const TAU = Math.PI * 2;
 
+/* Temple brick, volcanic stone and fibre thatch are all rough, porous
+   surfaces, and Lambert renders every one of them as the same flat plastic.
+   Standard with an honest roughness — plus the sky prefiltered into an
+   environment map — is what lets carved stone read as stone. */
 const M = {
-  brick:  new THREE.MeshLambertMaterial({ color: '#8a4a36' }),
-  brick2: new THREE.MeshLambertMaterial({ color: '#7a4030' }),
-  stone:  new THREE.MeshLambertMaterial({ color: '#7d7568' }),
-  stoneD: new THREE.MeshLambertMaterial({ color: '#5f584e' }),
-  thatch: new THREE.MeshLambertMaterial({ color: '#28211b' }),
-  wood:   new THREE.MeshLambertMaterial({ color: '#6b4f38' }),
-  gold:   new THREE.MeshLambertMaterial({ color: '#c9992e' }),
-  bambooM: new THREE.MeshLambertMaterial({ color: '#a8a05e' }),
-  leaf:   new THREE.MeshLambertMaterial({ color: '#c9c069' }),
-  cloth:  new THREE.MeshLambertMaterial({ color: '#e8e0c8', side: THREE.DoubleSide }),
+  brick:   new THREE.MeshStandardMaterial({ color: '#8a4a36', roughness: 0.94, metalness: 0 }),
+  brick2:  new THREE.MeshStandardMaterial({ color: '#7a4030', roughness: 0.96, metalness: 0 }),
+  stone:   new THREE.MeshStandardMaterial({ color: '#7d7568', roughness: 0.9,  metalness: 0 }),
+  stoneD:  new THREE.MeshStandardMaterial({ color: '#5f584e', roughness: 0.92, metalness: 0 }),
+  thatch:  new THREE.MeshStandardMaterial({ color: '#33291f', roughness: 1.0,  metalness: 0 }),
+  wood:    new THREE.MeshStandardMaterial({ color: '#6b4f38', roughness: 0.82, metalness: 0 }),
+  gold:    new THREE.MeshStandardMaterial({ color: '#c9992e', roughness: 0.34, metalness: 0.9 }),
+  bambooM: new THREE.MeshStandardMaterial({ color: '#a8a05e', roughness: 0.62, metalness: 0 }),
+  leaf:    new THREE.MeshStandardMaterial({ color: '#c9c069', roughness: 0.78, metalness: 0 }),
+  cloth:   new THREE.MeshStandardMaterial({ color: '#e8e0c8', roughness: 0.88, metalness: 0, side: THREE.DoubleSide }),
 };
 
 const box = (w, h, d, mat, x, y, z, ry = 0) => {
@@ -224,7 +228,7 @@ function lanternString(A, B, glowMats, rnd, sag = 1.1) {
   // the lanterns, one per interior knot
   for (let i = 1; i < N; i++) {
     const tint = LANTERN_TINTS[(rnd() * LANTERN_TINTS.length) | 0];
-    const mat = new THREE.MeshLambertMaterial({
+    const mat = new THREE.MeshStandardMaterial({
       color: tint, emissive: new THREE.Color(tint), emissiveIntensity: 0,
     });
     const shell = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat);

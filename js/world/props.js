@@ -101,7 +101,7 @@ function buildTreeProto(seed, kind = 'round') {
 
 /** Shared foliage material with a wind sway baked into the vertex stage. */
 function foliageMaterial(uniforms, { amp = 1, instanced = true } = {}) {
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.uniforms.uWind = uniforms.uWind;
@@ -257,13 +257,13 @@ export function createGreatTree(uniforms) {
   // a rope swing hanging from one limb
   const rope = new THREE.Mesh(
     new THREE.CylinderGeometry(0.035, 0.035, 6.4, 5),
-    new THREE.MeshLambertMaterial({ color: '#b9a37c' })
+    new THREE.MeshStandardMaterial({ color: '#b9a37c' })
   );
   rope.position.set(3.6, H * 0.72 - 3.2, 1.2);
   group.add(rope);
   const plank = new THREE.Mesh(
     new THREE.BoxGeometry(1.3, 0.12, 0.5),
-    new THREE.MeshLambertMaterial({ color: '#a8825c' })
+    new THREE.MeshStandardMaterial({ color: '#a8825c' })
   );
   plank.position.set(3.6, H * 0.72 - 6.4, 1.2);
   plank.castShadow = true;
@@ -281,9 +281,9 @@ export function createCottage() {
   const group = new THREE.Group();
   group.name = 'cottage';
 
-  const wallMat = new THREE.MeshLambertMaterial({ color: '#e8dfc6' });
-  const beamMat = new THREE.MeshLambertMaterial({ color: '#7d6144' });
-  const roofMat = new THREE.MeshLambertMaterial({ color: '#7f6a52', flatShading: true });
+  const wallMat = new THREE.MeshStandardMaterial({ color: '#e8dfc6' });
+  const beamMat = new THREE.MeshStandardMaterial({ color: '#7d6144' });
+  const roofMat = new THREE.MeshStandardMaterial({ color: '#7f6a52', flatShading: true });
 
   const body = new THREE.Mesh(new THREE.BoxGeometry(6.4, 3.5, 5.2), wallMat);
   body.position.y = 1.75;
@@ -327,7 +327,7 @@ export function createCottage() {
     glows.push(g);
   }
 
-  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), new THREE.MeshLambertMaterial({ color: '#9c8874' }));
+  const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.4, 0.9), new THREE.MeshStandardMaterial({ color: '#9c8874' }));
   chimney.position.set(-2.0, 5.2, -1.2);
   chimney.castShadow = true;
   group.add(chimney);
@@ -348,8 +348,8 @@ export function createCottage() {
 export function createShrine() {
   const group = new THREE.Group();
   group.name = 'shrine';
-  const red = new THREE.MeshLambertMaterial({ color: '#c1503f' });
-  const dark = new THREE.MeshLambertMaterial({ color: '#3c2b25' });
+  const red = new THREE.MeshStandardMaterial({ color: '#c1503f' });
+  const dark = new THREE.MeshStandardMaterial({ color: '#3c2b25' });
 
   const mk = (geo, mat, x, y, z, ry = 0) => {
     const m = new THREE.Mesh(geo, mat);
@@ -375,7 +375,7 @@ export function createShrine() {
 export function createLanterns(spots) {
   const group = new THREE.Group();
   group.name = 'lanterns';
-  const stone = new THREE.MeshLambertMaterial({ color: '#a9a396' });
+  const stone = new THREE.MeshStandardMaterial({ color: '#a9a396' });
   const glowMat = new THREE.MeshBasicMaterial({ color: '#ffc978' });
   const glows = [];
   const lights = [];
@@ -415,7 +415,7 @@ export function createLanterns(spots) {
 export function createJetty() {
   const group = new THREE.Group();
   group.name = 'jetty';
-  const wood = new THREE.MeshLambertMaterial({ color: '#9b7a55' });
+  const wood = new THREE.MeshStandardMaterial({ color: '#9b7a55' });
 
   const dirX = -1, dirZ = 0.35;
   const len = Math.hypot(dirX, dirZ);
@@ -447,9 +447,9 @@ export function createMushrooms(count = 70) {
   group.name = 'mushrooms';
   const capGeo = new THREE.SphereGeometry(0.26, 10, 7, 0, Math.PI * 2, 0, Math.PI / 2);
   const stemGeo = new THREE.CylinderGeometry(0.07, 0.1, 0.3, 6);
-  const capMat = new THREE.MeshLambertMaterial({ color: '#d0685c', emissive: '#2a0e0c' });
-  const capMat2 = new THREE.MeshLambertMaterial({ color: '#e8dcc0' });
-  const stemMat = new THREE.MeshLambertMaterial({ color: '#f2ead6' });
+  const capMat = new THREE.MeshStandardMaterial({ color: '#d0685c', emissive: '#2a0e0c' });
+  const capMat2 = new THREE.MeshStandardMaterial({ color: '#e8dcc0' });
+  const stemMat = new THREE.MeshStandardMaterial({ color: '#f2ead6' });
 
   const caps = new THREE.InstancedMesh(capGeo, capMat, count);
   const caps2 = new THREE.InstancedMesh(capGeo, capMat2, count);
