@@ -255,11 +255,17 @@ void main() {
   fade *= grow;
 
   // ── the blade ──
-  float hgt = (0.30 + aRand.y * aRand.y * 0.62) * mix(0.68, 1.0, mask) * uLodB.y * fade;
-  hgt *= 0.78 + tint * 0.5;                       // tussocks, at meadow scale
+  // A wild hay meadow, not a lawn: height clusters at two scales, metre-wide
+  // tussocks sitting inside decametre swales. Without this the sward is an
+  // even pile and reads as mown turf however dense it gets.
+  float clumpA = vnoise(root * 0.85);             // ~1.2 m tussocks
+  float clumpB = tint;                            // ~29 m swales
+  float hgt = (0.30 + aRand.y * aRand.y * 0.62) * mix(0.62, 1.0, mask) * uLodB.y * fade;
+  hgt *= 0.60 + 0.88 * clumpB;
+  hgt *= 0.76 + 0.52 * clumpA;
   if (hgt < 0.02) { degenerate(); return; }
 
-  float wid = 0.011 + aRand.z * 0.010;
+  float wid = (0.011 + aRand.z * 0.010) * (0.85 + 0.35 * clumpA);
   // angular floor — a blade is never allowed to fall below about a pixel
   wid = max(wid, dist * uLodB.x);
 
@@ -318,11 +324,14 @@ void main() {
   vec3 col = mix(deep, low, s1);
   col = mix(col, mid, s2);
   col = mix(col, mix(upper, tipc, s3), s3);
-  col = mix(col, dry, smoothstep(0.55, 1.0, tint) * 0.5 * smoothstep(0.3, 1.0, t));
+  // dry, seeding heads on the swale shoulders
+  float dryness = smoothstep(0.5, 0.95, tint) * 0.55 + smoothstep(0.62, 1.0, clumpA) * 0.3;
+  col = mix(col, dry, clamp(dryness, 0.0, 0.85) * smoothstep(0.25, 1.0, t));
 
   // broad patches of cooler and warmer grass — a meadow never settles on one green
-  col *= mix(vec3(0.84, 1.0, 0.95), vec3(1.14, 1.0, 0.76), tint);
-  col *= 0.8 + aRand.z * 0.4;
+  col *= mix(vec3(0.80, 1.0, 0.96), vec3(1.18, 1.0, 0.72), tint);
+  col *= mix(vec3(0.93, 1.0, 0.94), vec3(1.06, 1.0, 0.9), clumpA);
+  col *= 0.76 + aRand.z * 0.46;
 
   // occlusion down in the sward, which is what sells the density
   col *= mix(0.24, 1.0, smoothstep(0.0, 0.7, t));
@@ -398,16 +407,21 @@ void main() {
 /* ───────────── the field ───────────── */
 
 // B·dn^1.5 is held constant across rings so density is continuous.
+/* `wpx` is the minimum width a blade of this ring is allowed to have ON SCREEN,
+   in pixels. It is converted to a world-space slope against the real viewport
+   every resize. Getting this wrong is what makes distant grass shatter: below
+   about a pixel and a half a blade stops being a shape and becomes a stochastic
+   sliver that flickers on and off as the camera moves. */
 const RINGS = [
-  { radius:  20, count: 240000, segments: 4, dn:  8, hs: 1.00, wpx: 0.00045 }, // 150/m²
-  { radius:  72, count: 620000, segments: 3, dn: 34, hs: 1.15, wpx: 0.00075 }, //  30/m²
-  { radius: 160, count: 480000, segments: 2, dn: 74, hs: 1.50, wpx: 0.00155 }, // 4.7/m²
+  { radius:  20, count: 240000, segments: 4, dn:  8, hs: 1.00, wpx: 1.9 }, // 150/m²
+  { radius:  72, count: 420000, segments: 3, dn: 30, hs: 1.15, wpx: 2.7 }, //  20/m²
+  { radius: 160, count: 340000, segments: 2, dn: 70, hs: 1.50, wpx: 4.4 }, // 3.3/m²
 ];
 
 const LOW_RINGS = [
-  { radius:  18, count:  70000, segments: 3, dn:  7, hs: 1.00, wpx: 0.00075 },
-  { radius:  62, count: 110000, segments: 2, dn: 22, hs: 1.20, wpx: 0.00110 },
-  { radius: 140, count:  90000, segments: 2, dn: 60, hs: 1.55, wpx: 0.00200 },
+  { radius:  18, count:  70000, segments: 3, dn:  7, hs: 1.00, wpx: 2.2 },
+  { radius:  62, count: 110000, segments: 2, dn: 22, hs: 1.20, wpx: 3.2 },
+  { radius: 140, count:  90000, segments: 2, dn: 60, hs: 1.55, wpx: 5.0 },
 ];
 
 export class GrassField {
@@ -417,7 +431,8 @@ export class GrassField {
     this.materials = [];
     this.cloudDrift = new THREE.Vector2();
 
-    const specs = lowEnd ? LOW_RINGS : RINGS;
+    this.specs = lowEnd ? LOW_RINGS : RINGS;
+    const specs = this.specs;
     const rnd = makeRandom(13579);
 
     specs.forEach((spec, i) => {
@@ -463,7 +478,7 @@ export class GrassField {
           uRain: { value: 0 },
           uWindDir: { value: new THREE.Vector2(0.86, 0.51).normalize() },
           uLod: { value: new THREE.Vector4(near, near * 0.35 + 0.01, far, far * 0.18 + 0.01) },
-          uLodB: { value: new THREE.Vector3(spec.wpx, spec.hs, spec.dn) },
+          uLodB: { value: new THREE.Vector3(spec.wpx * 0.0011, spec.hs, spec.dn) },
           uCull: { value: new THREE.Vector3(0, 1, -1) },
           uSunDir: { value: new THREE.Vector3(0, 1, 0) },
           uSunColor: { value: new THREE.Color(1, 1, 1) },
@@ -487,6 +502,18 @@ export class GrassField {
 
       this.rings.push(mesh);
       this.materials.push(mat);
+    });
+  }
+
+  /**
+   * Convert each ring's pixel-width floor into a world-space slope for the
+   * actual viewport: one pixel subtends 2·tan(fov/2)/height radians, so a blade
+   * at distance d needs `wpx · that · d` metres of width to hold its ground.
+   */
+  setViewport(fovDeg, heightPx) {
+    const perPixel = (2 * Math.tan((fovDeg * Math.PI) / 360)) / Math.max(1, heightPx);
+    this.specs.forEach((spec, i) => {
+      this.materials[i].uniforms.uLodB.value.x = spec.wpx * perPixel;
     });
   }
 

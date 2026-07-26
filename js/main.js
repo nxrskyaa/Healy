@@ -3,6 +3,8 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 
 import { startMenuArt } from './menuart.js';
 import { Input } from './input.js';
@@ -97,10 +99,15 @@ input.on('escape', () => {
 
 /* ───────────────────────── renderer ───────────────────────── */
 
-let renderer, scene, camera, composer, bloom, painterly;
+let renderer, scene, camera, composer, bloom, painterly, fxaa;
 let sky, weather, wildlife, player, water, petals, fireflies, lilies, cottage, lanterns, grass;
 let windUniforms;
 const LOW_END = matchMedia('(hover: none) and (pointer: coarse)').matches;
+
+// Adaptive resolution. A million blades is a very different proposition on a
+// desktop GPU and on an integrated one, and there is no way to know which you
+// are on until you draw a frame — so measure, and give back pixels if needed.
+const quality = { ss: 1, frames: 0, sum: 0, steps: 0 };
 const clock = new THREE.Clock();
 let nightFactor = 0;
 
@@ -108,7 +115,11 @@ function initRenderer() {
   renderer = new THREE.WebGLRenderer({
     canvas: el.canvas, antialias: true, powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  // A touch of supersample on top of the device ratio: the composite always
+  // resolves DOWN to the canvas, which is what keeps a million hairline blades
+  // from turning into a field of sparkling shards.
+  quality.ss = LOW_END ? 0.85 : 1.0;
+  renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -119,7 +130,17 @@ function initRenderer() {
   camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 2200);
   camera.position.set(0, 6, 16);
 
-  composer = new EffectComposer(renderer);
+  // EffectComposer renders the scene into a target, which silently discards the
+  // renderer's own `antialias`. Grass is nothing but edges, so the multisampled
+  // target below is the single biggest thing standing between this and a mess
+  // of jagged slivers.
+  const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const target = new THREE.WebGLRenderTarget(dbs.x, dbs.y, {
+    type: THREE.HalfFloatType,
+    samples: LOW_END ? 0 : 2,
+  });
+
+  composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
   bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.34, 0.7, 0.86);
   composer.addPass(bloom);
@@ -127,7 +148,13 @@ function initRenderer() {
   composer.addPass(painterly);
   composer.addPass(new OutputPass());
 
+  // and a luma FXAA on the resolved image to soften whatever MSAA could not
+  // see — sub-pixel blade tips, mostly
+  fxaa = new ShaderPass(FXAAShader);
+  composer.addPass(fxaa);
+
   addEventListener('resize', onResize);
+  onResize();
 }
 
 function onResize() {
@@ -136,6 +163,10 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
+
+  const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
+  fxaa.material.uniforms.resolution.value.set(1 / dbs.x, 1 / dbs.y);
+  if (grass) grass.setViewport(camera.fov, dbs.y);
 }
 
 /* ───────────────────────── world build ───────────────────────── */
@@ -156,6 +187,7 @@ async function buildWorld() {
       grass = new GrassField(scene, LOW_END
         ? { lowEnd: true, mapSize: 384 }
         : { mapSize: 512 });
+      onResize();
     }],
     ['menyemai bunga liar…', () => { scene.add(createFlowers(2400)); scene.add(createStones(120)); }],
     ['menanam hutan…', () => { scene.add(createForest(windUniforms, 180)); }],
@@ -381,6 +413,27 @@ function step(dt, t) {
   if (chipTimer <= 0) { chipTimer = 1.5; refreshChips(); }
 
   composer.render();
+  governQuality(dt);
+}
+
+/** Two chances to shed resolution, then leave it alone. */
+function governQuality(dt) {
+  if (quality.steps >= 2 || !state.running) return;
+  quality.frames++;
+  quality.sum += dt;
+  if (quality.frames < 90) return;
+
+  const avg = quality.sum / quality.frames;
+  quality.frames = 0;
+  quality.sum = 0;
+  if (avg > 0.028 && quality.ss > 0.62) {          // slower than ~36fps
+    quality.steps++;
+    quality.ss *= 0.78;
+    renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, 2));
+    onResize();
+  } else if (avg < 0.014) {
+    quality.steps = 2;                              // comfortably fast, stop measuring
+  }
 }
 
 requestAnimationFrame(animate);

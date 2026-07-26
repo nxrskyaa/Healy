@@ -15,7 +15,7 @@ const PainterlyShader = {
     uCool: { value: new THREE.Color('#5f7c9c') },
     uAmount: { value: 1.0 },
     uVignette: { value: 0.32 },
-    uGrain: { value: 0.035 },
+    uGrain: { value: 0.016 },
     uSaturation: { value: 1.12 },
   },
   vertexShader: /* glsl */`
