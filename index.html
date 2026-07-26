@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Healy — A Quiet Little World</title>
+<meta name="description" content="Healy — dunia kecil yang tenang. Jalan-jalan di padang rumput Ghibli-esque, dengerin hujan dan lofi, temenin hewan-hewan lucu." />
+<meta name="theme-color" content="#0e1c1f" />
+<meta property="og:title" content="Healy — A Quiet Little World" />
+<meta property="og:description" content="Dunia kecil yang tenang. Hujan, lofi, dan hewan-hewan lucu." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌿</text></svg>" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Gloock&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./css/style.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/three.module.js",
+    "three/addons/": "./vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+
+<!-- ══════════════ MENU BACKDROP (canvas art) ══════════════ -->
+<div id="menu-art" aria-hidden="true">
+  <canvas id="menu-canvas"></canvas>
+  <div class="vignette"></div>
+</div>
+
+<!-- ══════════════ MAIN MENU ══════════════ -->
+<div id="menu" class="screen active">
+  <div class="menu-inner">
+    <div class="title-block">
+      <div class="kanji">癒し</div>
+      <h1 class="title">Healy</h1>
+      <p class="subtitle">a quiet little world · <span class="soft">dunia kecil yang menenangkan</span></p>
+    </div>
+
+    <nav class="menu-nav">
+      <button class="mbtn primary" data-action="start">
+        <span class="glyph">🌾</span>
+        <span class="lbl"><b>Masuk Dunia</b><i>mulai berjalan-jalan</i></span>
+      </button>
+      <button class="mbtn" data-action="controls">
+        <span class="glyph">🎮</span>
+        <span class="lbl"><b>Kontrol</b><i>cara menggerakkan karakter</i></span>
+      </button>
+      <button class="mbtn" data-action="about">
+        <span class="glyph">🍃</span>
+        <span class="lbl"><b>Tentang</b><i>siapa yang bikin ini</i></span>
+      </button>
+    </nav>
+
+    <div class="menu-foot">
+      <span class="dot"></span> pakai headphone biar makin syahdu
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CONTROLS PANEL ══════════════ -->
+<div id="controls" class="screen">
+  <div class="panel">
+    <button class="close" data-action="back" aria-label="Kembali">✕</button>
+    <h2>Kontrol</h2>
+    <p class="panel-sub">Semua serba santai. Nggak ada yang bisa bikin kamu kalah di sini.</p>
+
+    <div class="keygrid">
+      <div class="krow"><span class="keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span>Jalan berkeliling</span></div>
+      <div class="krow"><span class="keys"><kbd>Shift</kbd></span><span>Lari kecil</span></div>
+      <div class="krow"><span class="keys"><kbd>Space</kbd></span><span>Lompat</span></div>
+      <div class="krow"><span class="keys"><kbd class="wide">Drag Mouse</kbd></span><span>Putar kamera</span></div>
+      <div class="krow"><span class="keys"><kbd class="wide">Scroll</kbd></span><span>Zoom in / out</span></div>
+      <div class="krow"><span class="keys"><kbd>E</kbd></span><span>Duduk & merenung</span></div>
+      <div class="krow"><span class="keys"><kbd>R</kbd></span><span>Ganti cuaca (cerah ⇄ hujan)</span></div>
+      <div class="krow"><span class="keys"><kbd>T</kbd></span><span>Percepat waktu (pagi → malam)</span></div>
+      <div class="krow"><span class="keys"><kbd>M</kbd></span><span>Musik on / off</span></div>
+      <div class="krow"><span class="keys"><kbd>H</kbd></span><span>Sembunyikan antarmuka</span></div>
+      <div class="krow"><span class="keys"><kbd>Esc</kbd></span><span>Jeda / kembali ke menu</span></div>
+    </div>
+
+    <div class="note">
+      📱 <b>Di HP:</b> geser joystick di kiri bawah buat jalan, sentuh &amp; geser layar buat lihat sekeliling,
+      tombol bulat di kanan buat lompat.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ ABOUT PANEL ══════════════ -->
+<div id="about" class="screen">
+  <div class="panel">
+    <button class="close" data-action="back" aria-label="Kembali">✕</button>
+    <h2>Tentang</h2>
+
+    <div class="about-card">
+      <div class="avatar">
+        <svg viewBox="0 0 100 100" width="100%" height="100%">
+          <defs>
+            <radialGradient id="ag" cx="35%" cy="30%">
+              <stop offset="0%" stop-color="#f4e7c8"/><stop offset="100%" stop-color="#8fae86"/>
+            </radialGradient>
+          </defs>
+          <circle cx="50" cy="50" r="48" fill="url(#ag)"/>
+          <ellipse cx="36" cy="46" rx="5" ry="7" fill="#26332b"/>
+          <ellipse cx="64" cy="46" rx="5" ry="7" fill="#26332b"/>
+          <circle cx="38" cy="43" r="1.8" fill="#fff"/><circle cx="66" cy="43" r="1.8" fill="#fff"/>
+          <path d="M40 64 Q50 72 60 64" stroke="#26332b" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="26" cy="58" r="5" fill="#e79a9a" opacity=".55"/>
+          <circle cx="74" cy="58" r="5" fill="#e79a9a" opacity=".55"/>
+        </svg>
+      </div>
+      <div class="about-text">
+        <div class="built">dibangun oleh</div>
+        <div class="handle">nxrskyaa</div>
+        <p>
+          Healy dibuat sebagai tempat singgah — bukan game yang harus dimenangkan.
+          Cuma padang rumput, suara hujan, lagu lofi, dan beberapa makhluk kecil yang
+          nggak akan pernah menyuruh kamu buru-buru.
+        </p>
+      </div>
+    </div>
+
+    <div class="links">
+      <a class="link-btn gh" href="https://github.com/nxrskyaa" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.54-3.88-1.54-.53-1.34-1.3-1.7-1.3-1.7-1.05-.72.08-.7.08-.7 1.17.08 1.79 1.2 1.79 1.2 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.8 0c2.2-1.5 3.17-1.18 3.17-1.18.63 1.59.23 2.76.12 3.05.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.4-5.25 5.69.41.36.78 1.06.78 2.14v3.17c0 .31.2.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5z"/></svg>
+        <span>github.com/nxrskyaa</span>
+      </a>
+      <a class="link-btn x" href="https://x.com/nxrskyaa" target="_blank" rel="noopener noreferrer">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M18.24 2H21.5l-7.13 8.15L22.75 22h-6.56l-5.14-6.72L5.17 22H1.9l7.62-8.71L1.25 2h6.72l4.65 6.15L18.24 2Zm-1.15 18h1.81L7.01 3.88H5.06L17.09 20Z"/></svg>
+        <span>x.com/nxrskyaa</span>
+      </a>
+    </div>
+
+    <div class="credits">
+      dibuat dengan Three.js · musik lofi dibangkitkan langsung di browser (Web Audio) ·
+      tanpa satu pun file gambar atau audio — seluruh dunianya digambar oleh kode
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ LOADING ══════════════ -->
+<div id="loading" class="screen">
+  <div class="load-inner">
+    <div class="leaf-spin">🍃</div>
+    <div class="load-txt">menumbuhkan rerumputan…</div>
+    <div class="bar"><i id="bar-fill"></i></div>
+  </div>
+</div>
+
+<!-- ══════════════ IN-WORLD HUD ══════════════ -->
+<div id="hud" class="hidden">
+  <div class="hud-top">
+    <div class="chip" id="chip-time">🌤 <span>Pagi</span></div>
+    <div class="chip" id="chip-weather">☁️ <span>Cerah</span></div>
+    <div class="chip" id="chip-music">🎵 <span>Lofi</span></div>
+  </div>
+
+  <div class="hud-hint" id="hud-hint">
+    <b>WASD</b> jalan · <b>Drag</b> lihat sekeliling · <b>R</b> hujan · <b>T</b> waktu · <b>Esc</b> menu
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- touch controls -->
+  <div id="touch" class="hidden">
+    <div id="stick"><i id="stick-knob"></i></div>
+    <button id="tjump" aria-label="Lompat">⤒</button>
+  </div>
+</div>
+
+<!-- ══════════════ PAUSE ══════════════ -->
+<div id="pause" class="screen">
+  <div class="panel small">
+    <h2>Istirahat sebentar</h2>
+    <p class="panel-sub">Dunianya nunggu kok, santai aja.</p>
+    <div class="pause-btns">
+      <button class="mbtn primary" data-action="resume"><span class="glyph">🌿</span><span class="lbl"><b>Lanjut Jalan</b></span></button>
+      <button class="mbtn" data-action="controls"><span class="glyph">🎮</span><span class="lbl"><b>Kontrol</b></span></button>
+      <button class="mbtn" data-action="about"><span class="glyph">🍃</span><span class="lbl"><b>Tentang</b></span></button>
+      <button class="mbtn" data-action="quit"><span class="glyph">🏠</span><span class="lbl"><b>Menu Utama</b></span></button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
