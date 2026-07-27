@@ -287,12 +287,16 @@ const waterFrag = /* glsl */`
     // fresnel toward the sky
     vec3 V = normalize(uCam - vWorld);
     float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 2.6);
-    col = mix(col, uSky, fres * 0.72);
+    col = mix(col, uSky, fres * 0.52);
 
-    // sun glitter
-    float spec = pow(max(dot(normalize(vec3(uSunDir.x, 1.0, uSunDir.z)), V), 0.0), 24.0);
-    col += uSun * spec * (0.35 + shimmer * 0.25);
-    col += uSun * shimmer * 0.035;
+    /* Glitter, kept on a leash. There is no tone mapping between here and the
+       screen — grade.js curves the frame but the pond was already clipping
+       before it got there — so a broad specular lobe added at full strength
+       turned the whole surface to paper white at any low sun. */
+    float spec = pow(max(dot(normalize(vec3(uSunDir.x, 1.0, uSunDir.z)), V), 0.0), 42.0);
+    col += uSun * min(spec * (0.3 + shimmer * 0.2), 0.55);
+    col += uSun * shimmer * 0.022;
+    col = min(col, vec3(1.35));
 
     // rain stipple — thousands of tiny impacts
     if (uRain > 0.01) {

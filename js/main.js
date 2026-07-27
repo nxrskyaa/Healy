@@ -39,6 +39,7 @@ import {
   createWater, createLilyPads, WATER_LEVEL,
 } from './world/terrain.js';
 import { buildBali } from './world/bali.js';
+import { buildScatter } from './world/scatter.js';
 import {
   createJetty, createMushrooms,
   createPetals, updatePetals, createFireflies, updateFireflies,
@@ -268,6 +269,9 @@ async function buildWorld() {
       bali = buildBali(scene);
       scene.add(createMushrooms(60));
     }],
+    ['cutting the rice terraces', () => {
+      scatter = buildScatter(scene, LOW_END ? { lowEnd: true } : {});
+    }],
     ['waking the animals', () => { wildlife = new Wildlife(scene); }],
     ['seeding the clouds', () => { weather = new Weather(scene, LOW_END ? { streaks: 2200, splashes: 120 } : {}); }],
     ['letting the petals go', () => {
@@ -284,12 +288,15 @@ async function buildWorld() {
     }],
   ];
 
+  const buildTimes = {};
   for (let i = 0; i < steps.length; i++) {
     const [label, fn] = steps[i];
     el.loadTxt.textContent = label;
     el.bar.style.width = `${Math.round((i / steps.length) * 100)}%`;
     await yieldToUI();
+    const t0 = performance.now();
     fn();
+    buildTimes[label] = Math.round(performance.now() - t0);
   }
   // Standard materials reflect the sky at full strength by default, which on
   // a bright overcast dome bleaches the palette. One pass, once.
@@ -297,7 +304,7 @@ async function buildWorld() {
 
   el.bar.style.width = '100%';
   state.built = true;
-  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, bali, wildlife, audio, state, step };
+  window.__healy = { renderer, scene, camera, composer, sky, weather, player, grass, forest, railway, bali, scatter, wildlife, audio, state, step, buildTimes };
 }
 
 /* ── flow ── */

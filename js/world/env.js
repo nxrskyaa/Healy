@@ -80,7 +80,14 @@ export class SkyEnvironment {
       if (!o.isMesh) return;
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       for (const m of mats) {
-        if (m && m.isMeshStandardMaterial) m.envMapIntensity = intensity;
+        if (!m || !m.isMeshStandardMaterial) continue;
+        /* A blind assign flattens every deliberate choice made elsewhere —
+           gilt finials and standing water are lifted on purpose, and having
+           the calibration pass silently drag them back to the house value is
+           how those decisions quietly stop existing. Opt out by marking the
+           material; anything unmarked is happy to be calibrated. */
+        if (m.userData && m.userData.envFixed) continue;
+        m.envMapIntensity = intensity;
       }
     });
   }
