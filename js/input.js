@@ -20,9 +20,25 @@ export class Input {
     this._lastX = 0;
     this._lastY = 0;
     this._stickId = null;
+    this.touchMove = null;
+
+    /* Look used to be counted in raw pixels, which quietly made the controls
+       worse the smaller the screen got: the same 0.0032 rad/px meant a full
+       thumb-swipe on a phone turned you barely a quarter as far as a mouse
+       drag across a desktop window. It is now a fraction of the short side of
+       the viewport, so a swipe of a given *proportion* turns you the same
+       amount everywhere, and a thumb gets extra gain on top because it has
+       far less room to travel than a mouse. */
+    this._pointers = new Map();     // live pointers on the canvas, for pinch
+    this._pinch = 0;
 
     this._bindKeyboard();
     this._bindPointer();
+  }
+
+  /** Look delta as a fraction of the viewport's short side. */
+  _lookScale(pointerType) {
+    return (pointerType === 'touch' ? 2.15 : 1) / Math.min(innerWidth, innerHeight);
   }
 
   on(key, fn) { this.actions.set(key, fn); return this; }
@@ -57,8 +73,22 @@ export class Input {
   _bindPointer() {
     const c = this.canvas;
 
+    /** Finger spread, for pinch-zoom. Null unless exactly two are down. */
+    const spread = () => {
+      if (this._pointers.size !== 2) return null;
+      const [a, b] = [...this._pointers.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
+
     c.addEventListener('pointerdown', (e) => {
       if (!this.enabled) return;
+      this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this._pointers.size === 2) {
+        // second finger down: this is a pinch, not a look
+        this._dragId = null;
+        this._pinch = spread();
+        return;
+      }
       if (this._dragId !== null) return;
       this._dragId = e.pointerId;
       this._lastX = e.clientX;
@@ -67,16 +97,29 @@ export class Input {
       c.style.cursor = 'grabbing';
     });
 
-    const moveHandler = (e) => {
+    c.addEventListener('pointermove', (e) => {
+      const p = this._pointers.get(e.pointerId);
+      if (p) { p.x = e.clientX; p.y = e.clientY; }
+
+      const s = spread();
+      if (s !== null) {
+        // fingers apart pulls the camera in, which is the way every map works
+        if (this._pinch) this.zoom -= (s - this._pinch) * 1.33;
+        this._pinch = s;
+        return;
+      }
+
       if (e.pointerId !== this._dragId) return;
-      this.look.x += e.clientX - this._lastX;
-      this.look.y += e.clientY - this._lastY;
+      const k = this._lookScale(e.pointerType);
+      this.look.x += (e.clientX - this._lastX) * k;
+      this.look.y += (e.clientY - this._lastY) * k;
       this._lastX = e.clientX;
       this._lastY = e.clientY;
-    };
-    c.addEventListener('pointermove', moveHandler);
+    });
 
     const end = (e) => {
+      this._pointers.delete(e.pointerId);
+      if (this._pointers.size < 2) this._pinch = 0;
       if (e.pointerId !== this._dragId) return;
       this._dragId = null;
       c.style.cursor = 'grab';
@@ -93,44 +136,57 @@ export class Input {
     this._bindTouch();
   }
 
+  /* The stick used to be a fixed 128 px circle bolted to the bottom-left
+     corner, so walking meant finding it before you could move — and its travel
+     radius was 42 px inside a 64 px ring, so the outer third of the thing you
+     could see did nothing. It now springs up wherever the thumb lands in the
+     left zone, and its travel matches the ring you are actually looking at. */
   _bindTouch() {
+    const zone = document.getElementById('stickzone');
     const stick = document.getElementById('stick');
     const knob = document.getElementById('stick-knob');
     const jump = document.getElementById('tjump');
-    if (!stick || !knob || !jump) return;
+    if (!zone || !stick || !knob || !jump) return;
 
-    const R = 42;
+    const R = 56;                       // == the ring's radius in style.css
     let ox = 0, oy = 0;
 
-    stick.addEventListener('pointerdown', (e) => {
+    zone.addEventListener('pointerdown', (e) => {
+      if (!this.enabled || this._stickId !== null) return;
       this._stickId = e.pointerId;
-      const r = stick.getBoundingClientRect();
-      ox = r.left + r.width / 2;
-      oy = r.top + r.height / 2;
-      stick.setPointerCapture(e.pointerId);
-      e.stopPropagation();
+      ox = e.clientX; oy = e.clientY;
+      stick.style.left = `${ox}px`;
+      stick.style.top = `${oy}px`;
+      stick.classList.add('on');
+      knob.style.transform = '';
+      this.touchMove = { x: 0, y: 0 };
+      zone.setPointerCapture(e.pointerId);
     });
 
-    stick.addEventListener('pointermove', (e) => {
+    zone.addEventListener('pointermove', (e) => {
       if (e.pointerId !== this._stickId) return;
       let dx = e.clientX - ox, dy = e.clientY - oy;
       const d = Math.hypot(dx, dy);
       if (d > R) { dx = (dx / d) * R; dy = (dy / d) * R; }
       knob.style.transform = `translate(${dx}px, ${dy}px)`;
       this.touchMove = { x: dx / R, y: -dy / R };
-      e.stopPropagation();
     });
 
     const release = (e) => {
       if (e.pointerId !== this._stickId) return;
       this._stickId = null;
       knob.style.transform = '';
+      stick.classList.remove('on');
       this.touchMove = null;
     };
-    stick.addEventListener('pointerup', release);
-    stick.addEventListener('pointercancel', release);
+    zone.addEventListener('pointerup', release);
+    zone.addEventListener('pointercancel', release);
 
-    jump.addEventListener('pointerdown', (e) => { this.jumpPressed = true; e.stopPropagation(); });
+    jump.addEventListener('pointerdown', (e) => {
+      if (!this.enabled) return;
+      this.jumpPressed = true;
+      e.preventDefault();
+    });
   }
 
   /** Fold keyboard + joystick into this.move; call once per frame. */
@@ -147,6 +203,8 @@ export class Input {
 
     this.move.x = x;
     this.move.y = y;
-    this.run = k.has('shift') || (this.touchMove && Math.hypot(this.touchMove.x, this.touchMove.y) > 0.85);
+    // pushing the stick near its edge runs; 0.85 of full travel was a hair
+    // under the point a thumb comfortably reaches, so it almost never fired
+    this.run = k.has('shift') || (this.touchMove && Math.hypot(this.touchMove.x, this.touchMove.y) > 0.76);
   }
 }

@@ -76,8 +76,9 @@
     </div>
 
     <div class="note">
-      On a phone: the left stick walks, dragging anywhere else looks around,
-      and the right button jumps.
+      On a phone: touch anywhere on the left to walk — the stick appears under
+      your thumb. Drag on the right to look, pinch to zoom, and the round
+      button jumps.
     </div>
   </div>
 </div>
@@ -166,6 +167,8 @@
   <div id="toast"></div>
 
   <div id="touch" class="hidden">
+    <!-- the whole lower-left is the stick: it appears under the thumb -->
+    <div id="stickzone"></div>
     <div id="stick"><i id="stick-knob"></i></div>
     <button id="tjump" aria-label="Jump"></button>
   </div>

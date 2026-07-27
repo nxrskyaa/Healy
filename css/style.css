@@ -419,16 +419,27 @@ kbd.wide { min-width: 62px; }
 /* ── touch controls ── */
 #touch { pointer-events: none; }
 #touch.hidden { display: none; }
-#stick {
-  position: absolute; left: 26px; bottom: max(34px, env(safe-area-inset-bottom));
-  width: 128px; height: 128px; border-radius: 50%;
-  background: rgba(236, 229, 210, .07);
-  border: 1px solid rgba(236, 229, 210, .25);
+
+/* The catchment for the walking thumb. Invisible on purpose: the ring is
+   drawn wherever the thumb actually lands, so there is nothing to aim at. */
+#stickzone {
+  position: absolute; left: 0; bottom: 0;
+  width: 46%; height: 74%;
   pointer-events: auto; touch-action: none;
 }
+#stick {
+  position: absolute; left: 0; top: 0;
+  width: 112px; height: 112px; margin: -56px 0 0 -56px;   /* radius 56 == input.js R */
+  border-radius: 50%;
+  background: rgba(236, 229, 210, .06);
+  border: 1px solid rgba(236, 229, 210, .22);
+  pointer-events: none; touch-action: none;
+  opacity: 0; transition: opacity .18s ease;
+}
+#stick.on { opacity: 1; }
 #stick-knob {
   position: absolute; top: 50%; left: 50%;
-  width: 52px; height: 52px; margin: -26px 0 0 -26px;
+  width: 46px; height: 46px; margin: -23px 0 0 -23px;
   border-radius: 50%;
   background: rgba(236, 229, 210, .5);
   transition: transform .05s linear;

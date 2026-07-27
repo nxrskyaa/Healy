@@ -73,9 +73,12 @@ export class Player {
   toggleSit() { this.sitting = !this.sitting; return this.sitting; }
 
   update(dt, t, input) {
-    // ── look ──────────────────────────────────────────────
-    this.yaw -= input.look.x * 0.0032;
-    this.pitch = clamp(this.pitch + input.look.y * 0.0026,
+    /* ── look ──────────────────────────────────────────────
+       input.look now arrives as a fraction of the viewport's short side
+       rather than as pixels, so these are radians per full-screen drag and
+       they mean the same thing on a phone as on a monitor. */
+    this.yaw -= input.look.x * 2.30;
+    this.pitch = clamp(this.pitch + input.look.y * 1.87,
       this.firstPerson ? -1.2 : -0.5, 1.15);
     this.dist = clamp(this.dist + input.zoom * 0.0075, 3.2, 17);
     input.consumeLook();

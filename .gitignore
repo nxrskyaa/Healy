@@ -5,3 +5,6 @@ Thumbs.db
 *.log
 
 .vercel
+
+# editor/agent tooling, not part of the project
+.claude/

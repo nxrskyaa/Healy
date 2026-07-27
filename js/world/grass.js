@@ -259,15 +259,21 @@ void main() {
   if (grow <= 0.004) { degenerate(); return; }
   fade *= grow;
 
-  // ── the blade ──
-  // A wild hay meadow, not a lawn: height clusters at two scales, metre-wide
-  // tussocks sitting inside decametre swales. Without this the sward is an
-  // even pile and reads as mown turf however dense it gets.
+  /* ── the blade ──
+     A wild hay meadow, not a lawn: height clusters at two scales, metre-wide
+     tussocks sitting inside decametre swales. Without this the sward is an
+     even pile and reads as mown turf however dense it gets.
+
+     The three factors below MULTIPLY, which is how the old numbers ran away:
+     0.92 × 1.48 × 1.28 put the tallest near blades at 1.74 m, against a figure
+     who stands 1.6 m. The meadow was over her shoulders and every sense of
+     scale in the valley went with it. Retuned so the typical blade is about
+     shin height and the rankest tussock reaches a little over the knee. */
   float clumpA = vnoise(root * 0.85);             // ~1.2 m tussocks
   float clumpB = tint;                            // ~29 m swales
-  float hgt = (0.30 + aRand.y * aRand.y * 0.62) * mix(0.62, 1.0, mask) * uLodB.y * fade;
-  hgt *= 0.60 + 0.88 * clumpB;
-  hgt *= 0.76 + 0.52 * clumpA;
+  float hgt = (0.155 + aRand.y * aRand.y * 0.295) * mix(0.62, 1.0, mask) * uLodB.y * fade;
+  hgt *= 0.70 + 0.55 * clumpB;                    // ×1.25 at worst
+  hgt *= 0.82 + 0.34 * clumpA;                    // ×1.16 at worst
   if (hgt < 0.02) { degenerate(); return; }
 
   float wid = (0.011 + aRand.z * 0.010) * (0.85 + 0.35 * clumpA);

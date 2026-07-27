@@ -231,14 +231,14 @@ function lanternString(A, B, glowMats, rnd, sag = 1.1) {
     const mat = new THREE.MeshStandardMaterial({
       color: tint, emissive: new THREE.Color(tint), emissiveIntensity: 0,
     });
-    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 8), mat);
-    shell.scale.y = 1.25;
+    const shell = new THREE.Mesh(new THREE.SphereGeometry(0.105, 10, 8), mat);
+    shell.scale.y = 1.3;
     shell.position.copy(pts[i]);
-    shell.position.y -= 0.16;
+    shell.position.y -= 0.14;
     g.add(shell);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.05, 8), M.wood);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.048, 0.045, 8), M.wood);
     cap.position.copy(shell.position);
-    cap.position.y += 0.17;
+    cap.position.y += 0.145;
     g.add(cap);
     glowMats.push(mat);
   }
@@ -310,13 +310,17 @@ export function buildBali(scene) {
     [[4, 6], [-3, 10]],
   ];
   for (const [[ax, az], [bx, bz]] of strings) {
+    /* Poles were 2.7 m with up to 1.3 m of sag, which put the middle lanterns
+       at about 1.1 m — dead level with the face of a 1.6 m figure, so you
+       walked through them. Taller poles, shallower sag: the cord now clears
+       her head by better than half a metre at its lowest. */
     const ah = heightAt(ax, az), bh = heightAt(bx, bz);
-    const pa = pole(2.7); pa.position.set(ax, ah, az); group.add(pa);
-    const pb = pole(2.7); pb.position.set(bx, bh, bz); group.add(pb);
+    const pa = pole(3.4); pa.position.set(ax, ah, az); group.add(pa);
+    const pb = pole(3.4); pb.position.set(bx, bh, bz); group.add(pb);
     group.add(lanternString(
-      new THREE.Vector3(ax, ah + 2.62, az),
-      new THREE.Vector3(bx, bh + 2.62, bz),
-      glowMats, rnd, 0.8 + rnd() * 0.5
+      new THREE.Vector3(ax, ah + 3.30, az),
+      new THREE.Vector3(bx, bh + 3.30, bz),
+      glowMats, rnd, 0.50 + rnd() * 0.35
     ));
   }
 

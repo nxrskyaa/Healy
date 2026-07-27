@@ -490,6 +490,32 @@ function shard(w, len, thick = 0.045) {
   return worldUv(g, Math.max(1, 8 * w / UV), Math.max(1, len / UV));
 }
 
+/**
+ * A soft lock of hair: a flat blade that keeps most of its width down its
+ * length and then rounds off, bowing forward as it falls.
+ *
+ * The fringe used to be built from shard(), which is a four-sided cone — a
+ * pyramid. Seven pyramids stood side by side across a forehead do not read as
+ * hair at any distance; they read as the teeth of a saw, and that single
+ * detail was doing more damage to the face than anything else on the head.
+ * Nothing here comes to a point, and the tips are staggered.
+ */
+function lock(w, len, thick = 0.013, curl = 0.30) {
+  const rows = [];
+  const N = 6;
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const k = Math.sin((1 - t) * Math.PI * 0.5);       // 1 → 0, smoothly
+    rows.push({
+      y: -len * t,
+      rx: Math.max(w * (0.34 + 0.66 * Math.pow(k, 0.62)), w * 0.10),
+      rz: Math.max(thick * (0.45 + 0.55 * k), thick * 0.16),
+      cz: Math.pow(t, 1.7) * len * curl,               // falls forward
+    });
+  }
+  return loft(rows, { seg: 8, capTop: false, capBottom: true });
+}
+
 /* ───────────── the face ─────────────
 
    Four marks. A detailed eye — gradient iris, limbal ring, lash flick, blush —
@@ -540,32 +566,74 @@ function drawEye(ctx, box, iris, mirror, expr) {
     return;
   }
 
-  // A dark rim with the eye colour filling almost all of it. Painting the
-  // colour as a translucent wash over near-black just muddies it — an umber
-  // eye came out as dried blood.
-  eyePath(ctx, expr);
-  ctx.fillStyle = '#2f2836';
-  ctx.fill();
+  /* What was here was a flat disc of tinted colour with one dot on it, and
+     flat is exactly how it read: a printed sticker, the "dead doll" stare.
+     Three things fix that, and none of them is more detail —
+
+       1. a VERTICAL RAMP down the iris. Real eyes sit under a brow and a lid,
+          so the top of the iris is always in shadow and the bottom always
+          catches the sky. One gradient does more for life than any amount of
+          drawn texture.
+       2. a LASH LINE with weight, heaviest over the outer third. The eye is
+          read from its upper edge; a uniform outline reads as a circle.
+       3. a highlight that BREAKS the pupil edge rather than floating in the
+          middle of the iris, which is what makes it look wet. */
+  const c = new THREE.Color(iris);
+  const deep = c.clone().lerp(new THREE.Color('#140f1c'), 0.62).getStyle();
+  const mid = c.clone().lerp(new THREE.Color('#000000'), 0.10).getStyle();
+  const lift = c.clone().lerp(new THREE.Color('#fff6e2'), 0.46).getStyle();
 
   ctx.save();
   eyePath(ctx, expr);
   ctx.clip();
-  const c = new THREE.Color(iris);
-  ctx.fillStyle = c.clone().lerp(new THREE.Color('#ffffff'), 0.22).getStyle();
+
+  const grd = ctx.createLinearGradient(0, -0.5, 0, 0.5);
+  grd.addColorStop(0.00, deep);
+  grd.addColorStop(0.45, mid);
+  grd.addColorStop(1.00, lift);
+  ctx.fillStyle = grd;
+  ctx.fillRect(-0.7, -0.7, 1.4, 1.4);
+
+  // pupil — smaller than before, so the iris colour actually survives
+  ctx.fillStyle = 'rgba(18,13,24,0.94)';
   ctx.beginPath();
-  ctx.ellipse(0, 0.1, 0.4, 0.4, 0, 0, TAU);
+  ctx.ellipse(0, 0.08, 0.155, 0.21, 0, 0, TAU);
   ctx.fill();
-  ctx.fillStyle = 'rgba(30,24,36,0.85)';
+
+  // the lash, drawn inside the clip so it thickens the lid without spilling
+  ctx.strokeStyle = '#251e30';
+  ctx.lineWidth = 0.30;
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.ellipse(0, 0.12, 0.17, 0.19, 0, 0, TAU);
-  ctx.fill();
+  ctx.moveTo(-0.54, 0.00);
+  ctx.bezierCurveTo(-0.44, -0.62, 0.26, -0.60, 0.56, -0.06);
+  ctx.stroke();
+
+  // and the faintest lower lid, which is what stops the eye reading as a hole
+  ctx.strokeStyle = 'rgba(60,44,54,0.34)';
+  ctx.lineWidth = 0.075;
+  ctx.beginPath();
+  ctx.moveTo(-0.34, 0.40);
+  ctx.quadraticCurveTo(0.02, 0.52, 0.40, 0.30);
+  ctx.stroke();
   ctx.restore();
 
-  // one highlight. Two is a doll; none is a void.
+  // the rim, keeping the shape crisp against the skin
+  eyePath(ctx, expr);
+  ctx.strokeStyle = 'rgba(38,30,46,0.85)';
+  ctx.lineWidth = 0.055;
+  ctx.stroke();
+
   if (expr !== 'sleepy') {
-    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    // main catchlight, sitting across the pupil's upper edge
+    ctx.fillStyle = 'rgba(255,253,247,0.96)';
     ctx.beginPath();
-    ctx.ellipse(-0.17, -0.22, 0.15, 0.15, -0.35, 0, TAU);
+    ctx.ellipse(-0.15, -0.16, 0.135, 0.115, -0.4, 0, TAU);
+    ctx.fill();
+    // and one small answering glint low on the far side
+    ctx.fillStyle = 'rgba(255,252,240,0.42)';
+    ctx.beginPath();
+    ctx.ellipse(0.19, 0.26, 0.055, 0.045, 0.3, 0, TAU);
     ctx.fill();
   }
   ctx.restore();
@@ -701,17 +769,38 @@ function skullGeometry(grow = 1, segP = 32, segT = 24) {
 function faceGeometry(seg = 16) {
   const g = new THREE.PlaneGeometry(2, 2, seg, seg);
   const pos = g.attributes.position;
-  const p = new THREE.Vector3();
+  const nrm = new Float32Array(pos.count * 3);
+
+  const p = new THREE.Vector3(), pu = new THREE.Vector3(), pv = new THREE.Vector3();
+  const tu = new THREE.Vector3(), tv = new THREE.Vector3(), n = new THREE.Vector3();
+  const H = 1e-3;
+
+  const at = (yaw, pitch, out) => {
+    const cp = Math.cos(pitch);
+    return skullPoint(Math.sin(yaw) * cp, Math.sin(pitch), Math.cos(yaw) * cp, 1, out);
+  };
+
   for (let i = 0; i < pos.count; i++) {
     const yaw = pos.getX(i) * FACE_YAW;
     const pitch = pos.getY(i) * FACE_PITCH;
-    const cp = Math.cos(pitch);
-    const nx = Math.sin(yaw) * cp, ny = Math.sin(pitch), nz = Math.cos(yaw) * cp;
-    skullPoint(nx, ny, nz, 1, p);
+    at(yaw, pitch, p);
+
+    /* The normal is taken from the SKULL's own surface, by differencing it in
+       the two parameter directions — not from this patch's triangles.
+       computeVertexNormals only knows about the patch, so it averaged over a
+       different tessellation and one-sidedly along the border, and the face
+       ended up lit a shade apart from the head it sits on: a rectangle you
+       could read across the cheeks from any angle. Sharing the surface's
+       normal makes the seam disappear because there is nothing to see. */
+    at(yaw + H, pitch, pu);
+    at(yaw, pitch + H, pv);
+    n.crossVectors(tu.subVectors(pu, p), tv.subVectors(pv, p)).normalize();
+
     // a hair's breadth proud, backed up by polygonOffset on the material
-    pos.setXYZ(i, p.x + nx * 0.0012, p.y + ny * 0.0012, p.z + nz * 0.0012);
+    pos.setXYZ(i, p.x + n.x * 0.0012, p.y + n.y * 0.0012, p.z + n.z * 0.0012);
+    nrm[i * 3] = n.x; nrm[i * 3 + 1] = n.y; nrm[i * 3 + 2] = n.z;
   }
-  g.computeVertexNormals();
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   return g;
 }
 
@@ -893,18 +982,28 @@ function buildHair(cfg, mats) {
   /* Bangs. Rooted on the hairline and stopping short of the brow: left at
      sphere depth they stand proud of the face, left long they hang over the
      eyes, and either way the character loses its face. */
-  const bangN = p.tuft ? 5 : 7;
+  /* More locks, each narrower, each a different length. Evenly spaced locks of
+     one length give a repeating zigzag however soft the tips are; the fringe
+     has to be cut by an unsteady hand to look cut at all. The jitter is a
+     hash of the index, so a given character's fringe is the same every load. */
+  const bangN = p.tuft ? 8 : 11;
   for (let i = 0; i < bangN; i++) {
     const t = bangN === 1 ? 0.5 : i / (bangN - 1);
-    const phi = (t - 0.5) * 1.75;
+    const jit = ((Math.sin(i * 12.9898 + 4.1) * 43758.5453) % 1 + 1) % 1;
+    const phi = (t - 0.5) * 1.88 + (jit - 0.5) * 0.06;
     const hl = hairline(phi, p) * 0.97;
     const d = dirAt(phi, hl);
     const at = skullPoint(d[0], d[1], d[2], 1.055);
-    const len = 0.046 + Math.abs(t - 0.5) * 0.05 + (p.blunt ? 0.008 : 0);
-    const s = new THREE.Mesh(shard(0.030, len, 0.014), H);
+    /* Width matters more than it looks. Eleven locks 46 mm across, spread over
+       a hairline arc of about 216 mm, overlap two and a third times over and
+       fuse into one solid slab — a helmet, with the brows buried under it.
+       At 26 mm they overlap about 1.3×, which is a fringe: strands that touch
+       and part rather than a single moulded shape. */
+    const len = 0.034 + Math.abs(t - 0.5) * 0.036 + jit * 0.020 + (p.blunt ? 0.009 : 0);
+    const s = new THREE.Mesh(lock(0.013, len, 0.010, 0.22), H);
     s.rotation.order = 'YXZ';           // yaw first, so the tilt is in-plane
     s.position.copy(at);
-    s.rotation.set(-0.13, phi, (t - 0.5) * 0.34);
+    s.rotation.set(-0.13, phi, (t - 0.5) * 0.34 + (jit - 0.5) * 0.12);
     g.add(s);
   }
 

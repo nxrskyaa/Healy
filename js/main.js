@@ -81,6 +81,11 @@ const LOW_END = matchMedia('(hover: none) and (pointer: coarse)').matches;
 // GPU this is.
 const quality = { ss: LOW_END ? 0.8 : 1.0, frames: 0, sum: 0, steps: 0 };
 
+/** The one place the device ratio is decided, so a step-down cannot quietly
+    raise the phone's cap from 1.6 back to 2 the way two copies of this did. */
+const pixelRatioNow = () =>
+  Math.min((window.devicePixelRatio || 1) * quality.ss, LOW_END ? 1.6 : 2);
+
 const audio = new AudioEngine();
 const input = new Input(el.canvas);
 startMenuArt($('menu-canvas'));
@@ -166,13 +171,14 @@ let renderer, scene, camera, composer, bloom, print, fxaa;
 let sky, weather, wildlife, player, water, petals, fireflies, lilies;
 let bali, grass, forest, railway, scatter, skyEnv;
 const clock = new THREE.Clock();
+const _size = new THREE.Vector2();
 let nightFactor = 0;
 
 function initRenderer() {
   renderer = new THREE.WebGLRenderer({
     canvas: el.canvas, antialias: false, powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, LOW_END ? 1.6 : 2));
+  renderer.setPixelRatio(pixelRatioNow());
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = !LOW_END;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -192,6 +198,8 @@ function initRenderer() {
   });
 
   composer = new EffectComposer(renderer, target);
+  // onResize hands it device pixels directly; it must not scale them again
+  composer.setPixelRatio(1);
   /* The scene itself is drawn into the composer's SECOND buffer (RenderPass
      renders into the read buffer), so that is the one whose depth the ink
      pass needs. It must never hang off the first buffer: the print pass
@@ -220,22 +228,40 @@ function onResize() {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
-  composer.setSize(innerWidth, innerHeight);
 
-  const dbs = renderer.getDrawingBufferSize(new THREE.Vector2());
-  fxaa.material.uniforms.resolution.value.set(1 / dbs.x, 1 / dbs.y);
-  print.uniforms.uRes.value.set(dbs.x, dbs.y);
-  if (grass) grass.setViewport(camera.fov, dbs.y);
+  /* The composer is driven in DEVICE pixels, with its own ratio pinned to 1 in
+     initRenderer. Two reasons, and both of them were bugs.
 
-  // setSize does not reallocate an attached depth texture, and a stale-sized
-  // depth attachment makes the whole framebuffer undefined — rebuild it
+     It applies its own pixel ratio, read once at construction. governQuality
+     changes the renderer's ratio and calls back in here, so the colour targets
+     used to keep the old size while the depth texture below was rebuilt at the
+     new one. Two attachments of different sizes on one framebuffer is legal in
+     WebGL2 but only their overlap is defined, and blitFramebuffer copies depth
+     across the full colour rect: everything outside the overlap was per-frame
+     garbage, the ink pass read it as depth, and the image crawled. That was
+     the flicker.
+
+     And CSS pixels times a fractional ratio is fractional — 1280 × 0.78 is
+     998.4, which silently truncates to 998 on upload while every pass is told
+     998.4. getDrawingBufferSize is already integral, so ask it. */
+  const dbs = renderer.getDrawingBufferSize(_size);
+  composer.setSize(dbs.x, dbs.y);
+
+  // Match the depth attachment to the buffer it hangs off, not to the
+  // drawing buffer — those are the same size only when the two agree.
   const rt2 = composer.renderTarget2;
-  if (rt2.depthTexture && (rt2.depthTexture.image.width !== dbs.x || rt2.depthTexture.image.height !== dbs.y)) {
-    rt2.depthTexture.dispose();
-    rt2.depthTexture = new THREE.DepthTexture(dbs.x, dbs.y);
+  const dt = rt2.depthTexture;
+  if (!dt || dt.image.width !== rt2.width || dt.image.height !== rt2.height) {
+    dt?.dispose();
+    rt2.depthTexture = new THREE.DepthTexture(rt2.width, rt2.height);
     rt2.dispose();
     print.uniforms.uDepth.value = rt2.depthTexture;
   }
+
+  // and every pass that reasons in pixels reads the same size
+  fxaa.material.uniforms.resolution.value.set(1 / rt2.width, 1 / rt2.height);
+  print.uniforms.uRes.value.set(rt2.width, rt2.height);
+  if (grass) grass.setViewport(camera.fov, rt2.height);
 }
 
 /* ── world build ── */
@@ -507,8 +533,8 @@ function governQuality(dt) {
   if (avg > 0.028 && quality.ss > 0.55) {
     quality.steps++;
     quality.ss *= 0.78;
-    renderer.setPixelRatio(Math.min((window.devicePixelRatio || 1) * quality.ss, 2));
-    onResize();
+    renderer.setPixelRatio(pixelRatioNow());
+    onResize();          // hands the new ratio to the composer — see onResize
   } else if (avg < 0.014) {
     quality.steps = 2;
   }
